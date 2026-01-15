@@ -1,0 +1,5 @@
+@import "tailwindcss";
+
+.datepicker-input-wrapper .datepicker-input-icon {
+    display: none !important;
+}
