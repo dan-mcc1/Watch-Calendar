@@ -1,0 +1,12 @@
+# src/models/user.py
+from sqlalchemy import Column, String, DateTime
+from sqlalchemy.sql import func
+from app.db.base import Base
+
+
+class User(Base):
+    __tablename__ = "user"
+
+    id = Column(String, primary_key=True)  # Firebase UID
+    email = Column(String, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())

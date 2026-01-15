@@ -1,0 +1,22 @@
+# src/db/init_db.py
+from app.db.base import Base
+from app.db.session import engine
+
+# Import all models here so they are registered with Base
+from app.models.user import User
+from app.models.show import Show
+from app.models.movie import Movie
+from app.models.watchlist import Watchlist
+from app.models.episode_watched import EpisodeWatched
+from app.models.watched import Watched
+
+# add others as needed
+
+
+def init_db():
+    Base.metadata.create_all(bind=engine)
+    print("Database tables created!")
+
+
+if __name__ == "__main__":
+    init_db()
