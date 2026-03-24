@@ -15,64 +15,94 @@ type MediaCardProps =
     };
 
 export default function MediaCard({ item, type, onRemove }: MediaCardProps) {
-  const formatDate = (date: string) => {
-    return new Date(date).toLocaleDateString("en-US");
-  };
+  const title = type === "tv" ? (item as Show).name : (item as Movie).title;
+  const date = type === "tv" ? (item as Show).first_air_date : (item as Movie).release_date;
+  const year = date ? new Date(date).getFullYear() : null;
 
-  const handleRemove = () => {
-    if (!onRemove) return;
-
-    onRemove(type, item.id);
-  };
+  const genres: { id: number; name: string }[] = item.genres ?? [];
 
   return (
-    <div className="rounded-lg overflow-hidden bg-[#1f3b4d] flex flex-col">
-      {/* Image section */}
-      <div className="relative aspect-video cursor-pointer group">
-        <Link to={type === "tv" ? `/tv/${item.id}` : `/movie/${item.id}`}>
-          {item.backdrop_path && (
+    <div className="group relative rounded-xl overflow-hidden bg-slate-800 border border-slate-700 hover:border-slate-500 transition-all duration-200 hover:shadow-xl hover:shadow-black/40 hover:-translate-y-0.5 flex flex-col">
+      <Link to={type === "tv" ? `/tv/${item.id}` : `/movie/${item.id}`} className="flex flex-col flex-1">
+        {/* Backdrop image */}
+        <div className="relative aspect-video overflow-hidden">
+          {item.backdrop_path ? (
             <img
               src={`${BASE_IMAGE_URL}/w780${item.backdrop_path}`}
               alt=""
-              className="absolute inset-0 h-full w-full object-cover opacity-80"
+              className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
             />
+          ) : (
+            <div className="h-full w-full bg-slate-700 flex items-center justify-center">
+              <svg className="w-12 h-12 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M15 10l4.553-2.069A1 1 0 0121 8.87v6.26a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+              </svg>
+            </div>
           )}
-          <div className="absolute inset-0 bg-black/40" />
-          <div className="relative z-10 flex h-full items-center justify-center px-1">
-            {item.logo_path ? (
+          <div className="absolute inset-0 bg-gradient-to-t from-slate-800 via-transparent to-transparent" />
+
+          {/* Logo overlay */}
+          {item.logo_path && (
+            <div className="absolute bottom-2 left-0 right-0 flex justify-center px-3">
               <img
                 src={`${BASE_IMAGE_URL}/w300${item.logo_path}`}
-                alt={type === "tv" ? item.name : item.title}
-                className="max-h-10 object-contain"
+                alt={title}
+                className="max-h-8 object-contain drop-shadow-lg"
               />
-            ) : (
-              <span className="text-white text-[10px] font-semibold text-center line-clamp-2">
-                {type === "tv" ? item.name : item.title}
-              </span>
-            )}
-          </div>
-        </Link>
-      </div>
+            </div>
+          )}
 
-      {/* Bottom bar */}
-      <div className="flex items-center justify-between gap-2 px-[4%] py-3 bg-[#1f3b4d]">
-        <div className="flex flex-col justify-center min-h-[3.5rem]">
-          <div className="text-sm sm:text-base font-medium text-white line-clamp-2">
-            {type === "tv" ? item.name : item.title}
-          </div>
-          <div className="text-xs sm:text-sm text-white/80">
-            {type === "tv"
-              ? formatDate(item.first_air_date)
-              : formatDate(item.release_date)}
+          {/* Type badge */}
+          <div className="absolute top-2 left-2">
+            <span className={`text-xs font-medium px-2 py-0.5 rounded-full backdrop-blur-sm ${
+              type === "tv"
+                ? "bg-purple-600/70 text-purple-100"
+                : "bg-amber-600/70 text-amber-100"
+            }`}>
+              {type === "tv" ? "TV" : "Movie"}
+            </span>
           </div>
         </div>
-        <button
-          onClick={handleRemove}
-          className="shrink-0 bg-blue-700 px-3 py-1.5 text-xs sm:text-sm text-white rounded-md hover:opacity-80"
-        >
-          Remove
-        </button>
-      </div>
+
+        {/* Info bar */}
+        <div className="px-3 py-3 flex flex-col gap-1 flex-1">
+          {!item.logo_path && (
+            <div className="font-semibold text-slate-100 line-clamp-1 group-hover:text-blue-300 transition-colors">
+              {title}
+            </div>
+          )}
+          {item.logo_path && (
+            <div className="font-semibold text-slate-100 line-clamp-1 group-hover:text-blue-300 transition-colors">
+              {title}
+            </div>
+          )}
+          <div className="flex items-center gap-2 flex-wrap">
+            {year && (
+              <span className="text-xs text-slate-400">{year}</span>
+            )}
+            {genres.slice(0, 2).map((g) => (
+              <span key={g.id} className="text-xs text-slate-500 bg-slate-700/60 px-1.5 py-0.5 rounded">
+                {g.name}
+              </span>
+            ))}
+          </div>
+        </div>
+      </Link>
+
+      {/* Remove button */}
+      {onRemove && (
+        <div className="px-3 pb-3">
+          <button
+            onClick={(e) => {
+              e.preventDefault();
+              onRemove(type, item.id);
+            }}
+            className="w-full py-1.5 text-xs font-medium text-slate-400 bg-slate-700/50 hover:bg-red-600/20 hover:text-red-400 border border-slate-600 hover:border-red-600/40 rounded-lg transition-all duration-150"
+          >
+            Remove
+          </button>
+        </div>
+      )}
     </div>
   );
 }

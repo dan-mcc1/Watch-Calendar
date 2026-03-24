@@ -19,36 +19,43 @@ type FullPersonData = {
     twitter_id: string | null;
     wikidata_id: string | null;
   };
-  movie_credits: {
-    cast: Movie[];
-    crew: Movie[];
-  };
-  tv_credits: {
-    cast: Show[];
-    crew: Show[];
-  };
+  movie_credits: { cast: Movie[]; crew: Movie[] };
+  tv_credits: { cast: Show[]; crew: Show[] };
 };
+
+function ExternalLink({ href, label }: { href: string; label: string }) {
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="inline-flex items-center text-sm text-slate-400 hover:text-blue-400 bg-slate-800 border border-slate-700 hover:border-blue-600/50 px-3 py-1.5 rounded-lg transition-all duration-150"
+    >
+      {label}
+    </a>
+  );
+}
 
 function CreditList({
   title,
   credits,
+  linkPrefix,
   limit = 12,
 }: {
   title: string;
   credits: (Movie | Show)[];
+  linkPrefix: string;
   limit?: number;
 }) {
   const [showAll, setShowAll] = useState(false);
-
   if (!credits || credits.length === 0) return null;
-
-  const displayedCredits = showAll ? credits : credits.slice(0, limit);
+  const displayed = showAll ? credits : credits.slice(0, limit);
 
   return (
-    <div className="mb-6">
-      <h2 className="text-2xl font-semibold mb-3">{title}</h2>
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
-        {displayedCredits.map((item) => {
+    <div>
+      <h2 className="text-xl font-semibold text-slate-100 mb-4">{title}</h2>
+      <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3">
+        {displayed.map((item) => {
           const name = "title" in item ? item.title : item.name;
           const poster = item.poster_path || item.backdrop_path;
           const role = (item as any).character;
@@ -56,27 +63,23 @@ function CreditList({
           return (
             <Link
               key={item.id}
-              to={"title" in item ? `/movie/${item.id}` : `/tv/${item.id}`}
+              to={`${linkPrefix}/${item.id}`}
               className="group"
             >
               {poster ? (
                 <img
                   src={`${BASE_IMAGE_URL}/w300${poster}`}
                   alt={name}
-                  className="w-full rounded-md object-cover"
+                  className="w-full rounded-lg object-cover border border-slate-700 group-hover:border-slate-500 transition-all duration-200 group-hover:scale-105"
                 />
               ) : (
-                <div className="w-full h-48 bg-gray-200 rounded-md flex items-center justify-center">
-                  <span className="text-gray-500 text-sm text-center">
-                    {name}
-                  </span>
+                <div className="w-full aspect-[2/3] bg-slate-800 border border-slate-700 rounded-lg flex items-center justify-center">
+                  <span className="text-slate-500 text-xs text-center px-1">{name}</span>
                 </div>
               )}
-              <p className="text-sm mt-1 text-center font-medium">{name}</p>
+              <p className="text-xs mt-1.5 text-center text-slate-400 group-hover:text-slate-200 transition-colors line-clamp-1">{name}</p>
               {role && (
-                <p className="text-xs text-gray-500 text-center truncate">
-                  {role}
-                </p>
+                <p className="text-xs text-center text-slate-600 truncate">{role}</p>
               )}
             </Link>
           );
@@ -86,9 +89,9 @@ function CreditList({
       {credits.length > limit && (
         <button
           onClick={() => setShowAll(!showAll)}
-          className="mt-2 text-blue-500 hover:underline"
+          className="mt-4 text-sm text-blue-400 hover:text-blue-300 hover:underline"
         >
-          {showAll ? "Show Less" : `Show More (${credits.length - limit} more)`}
+          {showAll ? "Show Less" : `Show ${credits.length - limit} more`}
         </button>
       )}
     </div>
@@ -100,6 +103,7 @@ export default function PersonInfo() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [person, setPerson] = useState<FullPersonData | null>(null);
+  const [bioExpanded, setBioExpanded] = useState(false);
 
   useEffect(() => {
     async function getData() {
@@ -107,10 +111,8 @@ export default function PersonInfo() {
         setLoading(true);
         const res = await fetch(`${API_URL}/person/${id}/info`);
         if (!res.ok) throw new Error("Failed to fetch person");
-        const rawData = await res.json();
-        setPerson(rawData);
+        setPerson(await res.json());
       } catch (err: any) {
-        console.error(err);
         setError(err.message || "Something went wrong");
       } finally {
         setLoading(false);
@@ -119,102 +121,111 @@ export default function PersonInfo() {
     getData();
   }, [id]);
 
-  if (loading) return <p>Loading person info...</p>;
-  if (error) return <p className="text-red-500">{error}</p>;
-  if (!person) return <p>Person not found.</p>;
+  if (loading) return (
+    <div className="flex items-center justify-center min-h-64">
+      <div className="flex flex-col items-center gap-3">
+        <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+        <p className="text-slate-400 text-sm">Loading…</p>
+      </div>
+    </div>
+  );
+  if (error) return <p className="text-red-400 p-6">{error}</p>;
+  if (!person) return <p className="text-slate-400 p-6">Person not found.</p>;
+
+  const BIO_TRUNCATE = 400;
+  const bioIsTruncatable = person.biography && person.biography.length > BIO_TRUNCATE;
+  const displayedBio = bioIsTruncatable && !bioExpanded
+    ? person.biography.slice(0, BIO_TRUNCATE) + "…"
+    : person.biography;
 
   return (
-    <div className="p-6 max-w-5xl mx-auto">
-      <div className="flex flex-col md:flex-row gap-6 mb-6">
+    <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8 pb-16 space-y-10">
+      {/* ── PROFILE SECTION ── */}
+      <div className="flex flex-col sm:flex-row gap-6">
+        {/* Photo */}
         {person.profile_path && (
-          <img
-            src={`${BASE_IMAGE_URL}/w300${person.profile_path}`}
-            alt={person.name}
-            className="w-64 rounded-md object-cover"
-          />
+          <div className="flex-shrink-0">
+            <img
+              src={`${BASE_IMAGE_URL}/w300${person.profile_path}`}
+              alt={person.name}
+              className="w-40 sm:w-48 rounded-2xl object-cover border border-slate-700 shadow-2xl shadow-black/50"
+            />
+          </div>
         )}
-        <div className="flex-1">
-          <h1 className="text-3xl font-bold mb-2">{person.name}</h1>
-          {person.known_for_department && (
-            <p className="mb-2">
-              <strong>Known for:</strong> {person.known_for_department}
-            </p>
-          )}
-          {person.biography && (
-            <p className="mb-2">
-              <strong>Biography:</strong> {person.biography}
-            </p>
-          )}
-          {person.birthday && (
-            <p className="mb-1">
-              <strong>Birthday:</strong> {person.birthday}
-            </p>
-          )}
-          {person.deathday && (
-            <p className="mb-1">
-              <strong>Died:</strong> {person.deathday}
-            </p>
-          )}
-          {person.place_of_birth && (
-            <p className="mb-1">
-              <strong>Place of Birth:</strong> {person.place_of_birth}
-            </p>
-          )}
+
+        {/* Info */}
+        <div className="flex-1 space-y-4">
+          <div>
+            <h1 className="text-3xl font-bold text-white">{person.name}</h1>
+            {person.known_for_department && (
+              <p className="text-slate-400 mt-1">{person.known_for_department}</p>
+            )}
+          </div>
+
+          {/* Bio facts */}
+          <div className="grid grid-cols-2 gap-3 text-sm">
+            {person.birthday && (
+              <div className="bg-slate-800 border border-slate-700 rounded-xl px-4 py-3">
+                <div className="text-slate-500 text-xs uppercase tracking-wide mb-0.5">Born</div>
+                <div className="text-slate-200">
+                  {new Date(person.birthday).toLocaleDateString("en-us", { year: "numeric", month: "long", day: "numeric" })}
+                </div>
+              </div>
+            )}
+            {person.deathday && (
+              <div className="bg-slate-800 border border-slate-700 rounded-xl px-4 py-3">
+                <div className="text-slate-500 text-xs uppercase tracking-wide mb-0.5">Died</div>
+                <div className="text-slate-200">{person.deathday}</div>
+              </div>
+            )}
+            {person.place_of_birth && (
+              <div className="bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 col-span-2">
+                <div className="text-slate-500 text-xs uppercase tracking-wide mb-0.5">Place of Birth</div>
+                <div className="text-slate-200">{person.place_of_birth}</div>
+              </div>
+            )}
+          </div>
+
+          {/* External links */}
           {person.external_ids && (
-            <div className="mt-2 flex gap-4 flex-wrap">
-              {person.external_ids.imdb_id && (
-                <a
-                  href={`https://www.imdb.com/name/${person.external_ids.imdb_id}`}
-                  target="_blank"
-                  className="text-blue-500 hover:underline"
-                >
-                  IMDb
-                </a>
-              )}
-              {person.external_ids.facebook_id && (
-                <a
-                  href={`https://www.facebook.com/${person.external_ids.facebook_id}`}
-                  target="_blank"
-                  className="text-blue-500 hover:underline"
-                >
-                  Facebook
-                </a>
-              )}
-              {person.external_ids.instagram_id && (
-                <a
-                  href={`https://www.instagram.com/${person.external_ids.instagram_id}`}
-                  target="_blank"
-                  className="text-blue-500 hover:underline"
-                >
-                  Instagram
-                </a>
-              )}
-              {person.external_ids.twitter_id && (
-                <a
-                  href={`https://twitter.com/${person.external_ids.twitter_id}`}
-                  target="_blank"
-                  className="text-blue-500 hover:underline"
-                >
-                  Twitter
-                </a>
-              )}
-              {person.external_ids.wikidata_id && (
-                <a
-                  href={`https://www.wikidata.org/wiki/${person.external_ids.wikidata_id}`}
-                  target="_blank"
-                  className="text-blue-500 hover:underline"
-                >
-                  Wikidata
-                </a>
-              )}
+            <div className="flex flex-wrap gap-2">
+              {person.external_ids.imdb_id && <ExternalLink href={`https://www.imdb.com/name/${person.external_ids.imdb_id}`} label="IMDb" />}
+              {person.external_ids.instagram_id && <ExternalLink href={`https://www.instagram.com/${person.external_ids.instagram_id}`} label="Instagram" />}
+              {person.external_ids.twitter_id && <ExternalLink href={`https://twitter.com/${person.external_ids.twitter_id}`} label="Twitter / X" />}
+              {person.external_ids.facebook_id && <ExternalLink href={`https://www.facebook.com/${person.external_ids.facebook_id}`} label="Facebook" />}
+              {person.external_ids.wikidata_id && <ExternalLink href={`https://www.wikidata.org/wiki/${person.external_ids.wikidata_id}`} label="Wikidata" />}
             </div>
           )}
         </div>
       </div>
 
+      {/* Biography */}
+      {person.biography && (
+        <div>
+          <h2 className="text-slate-400 text-xs uppercase tracking-wider font-semibold mb-3">Biography</h2>
+          <p className="text-slate-300 leading-relaxed">{displayedBio}</p>
+          {bioIsTruncatable && (
+            <button
+              onClick={() => setBioExpanded(!bioExpanded)}
+              className="mt-2 text-sm text-blue-400 hover:text-blue-300 hover:underline"
+            >
+              {bioExpanded ? "Show less" : "Read more"}
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Credits */}
-      <CreditList title="Movies" credits={person.movie_credits.cast} />
-      <CreditList title="TV Shows" credits={person.tv_credits.cast} />
+      <CreditList
+        title="Movies"
+        credits={person.movie_credits.cast}
+        linkPrefix="/movie"
+      />
+      <CreditList
+        title="TV Shows"
+        credits={person.tv_credits.cast}
+        linkPrefix="/tv"
+      />
     </div>
   );
 }

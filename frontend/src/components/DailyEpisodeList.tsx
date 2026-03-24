@@ -1,9 +1,9 @@
-import type { Episode, Movie } from "../types/calendar";
+import type { Episode, Movie, Show } from "../types/calendar";
 import { BASE_IMAGE_URL } from "../constants";
 import { Link } from "react-router-dom";
 
 export type CalendarItem =
-  | (Episode & { type: "tv" }) // episodes from shows
+  | (Episode & { type: "tv"; showData: Show })
   | {
       id: number;
       title: string;
@@ -14,24 +14,49 @@ export type CalendarItem =
       showData: Movie;
       type: "movie";
       runtime: number;
-    }; // movies
+    };
 
 interface DailyItemListProps {
   dailyItems: CalendarItem[];
 }
 
+function RuntimeBadge({ minutes }: { minutes: number | null | undefined }) {
+  if (!minutes) return <span className="text-slate-500">Runtime N/A</span>;
+  return (
+    <span>
+      {Math.floor(minutes / 60) > 0 && `${Math.floor(minutes / 60)}h `}
+      {minutes % 60 > 0 && `${minutes % 60}m`}
+    </span>
+  );
+}
+
+function TypeBadge({ type }: { type: "tv" | "movie" }) {
+  return (
+    <span
+      className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+        type === "tv"
+          ? "bg-purple-600/20 text-purple-400 border border-purple-600/30"
+          : "bg-amber-600/20 text-amber-400 border border-amber-600/30"
+      }`}
+    >
+      {type === "tv" ? "TV" : "Movie"}
+    </span>
+  );
+}
+
 export default function DailyEpisodeList({ dailyItems }: DailyItemListProps) {
   const showEpisodes = dailyItems.filter((e) => e.type === "tv") as (Episode & {
     type: "tv";
+    showData: Show;
   })[];
   const movies = dailyItems.filter(
     (e) => e.type === "movie"
   ) as (CalendarItem & { type: "movie" })[];
 
-  // Group show episodes without still_path
   const episodesWithStill = showEpisodes.filter((e) => e.still_path);
   const episodesWithoutStill = showEpisodes.filter((e) => !e.still_path);
-  const groupedByShow: Record<string, (Episode & { type: "tv" })[]> = {};
+
+  const groupedByShow: Record<string, (Episode & { type: "tv"; showData: Show })[]> = {};
   episodesWithoutStill.forEach((episode) => {
     const showId = episode.showData?.id;
     if (!showId) return;
@@ -39,124 +64,150 @@ export default function DailyEpisodeList({ dailyItems }: DailyItemListProps) {
     groupedByShow[showId].push(episode);
   });
 
-  const formatDate = (date: string) => {
-    return new Date(date).toLocaleDateString("en-us");
-  };
+  const formatDate = (date: string) =>
+    new Date(date).toLocaleDateString("en-us", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    });
 
   return (
-    <>
-      {/* Render episodes with their own images */}
+    <div className="flex flex-col gap-3">
+      {/* Episodes with their own still image */}
       {episodesWithStill.map((episode, idx) => (
-        <div
-          key={`single-${idx}`}
-          className="flex gap-4 items-start p-2 border-b border-gray-200"
+        <Link
+          key={`still-${idx}`}
+          to={`/tv/${episode.showData.id}`}
+          className="group flex gap-0 bg-slate-800 rounded-xl overflow-hidden border border-slate-700 hover:border-slate-500 transition-all duration-200 hover:shadow-lg hover:shadow-black/30"
         >
-          <img
-            src={`${BASE_IMAGE_URL}/w500${episode.still_path}`}
-            alt={episode.name}
-            className="w-64 h-auto rounded-md object-cover flex-shrink-0"
-          />
+          <div className="relative w-48 sm:w-56 flex-shrink-0 aspect-video">
+            <img
+              src={`${BASE_IMAGE_URL}/w500${episode.still_path}`}
+              alt={episode.name}
+              className="h-full w-full object-cover"
+            />
+            <div className="absolute inset-0 bg-gradient-to-r from-transparent to-slate-800/20" />
+          </div>
 
-          <div className="flex flex-col">
-            <Link to={`/tv/${episode.showData.id}`}>
-              <div className="font-semibold text-gray-900">
-                {episode.showData?.name} - S{episode.season_number}E
-                {episode.episode_number} - {episode.name}
-              </div>
-            </Link>
-            <div className="text-gray-700 text-sm mt-1">{episode.overview}</div>
-            <div className="text-gray-500 text-xs mt-1">
-              Air date: {formatDate(episode.air_date)} | Runtime:{" "}
-              {episode.runtime ? (
-                <>
-                  {Math.floor(episode.runtime / 60) > 0 &&
-                    `${Math.floor(episode.runtime / 60)}h `}
-                  {episode.runtime % 60 > 0 && `${episode.runtime % 60}m`}
-                </>
-              ) : (
-                "N/A"
-              )}
+          <div className="flex flex-col justify-center px-4 py-3 min-w-0 flex-1">
+            <div className="flex items-center gap-2 mb-1">
+              <TypeBadge type="tv" />
+              <span className="text-slate-500 text-xs">
+                S{episode.season_number}E{episode.episode_number}
+              </span>
+            </div>
+            <div className="font-semibold text-slate-100 group-hover:text-blue-300 transition-colors line-clamp-1">
+              {episode.showData?.name}
+            </div>
+            <div className="text-slate-400 text-sm mt-0.5 line-clamp-1">
+              {episode.name}
+            </div>
+            {episode.overview && (
+              <p className="text-slate-500 text-xs mt-1.5 line-clamp-2 hidden sm:block">
+                {episode.overview}
+              </p>
+            )}
+            <div className="flex items-center gap-3 text-slate-500 text-xs mt-2">
+              <span>{formatDate(episode.air_date)}</span>
+              <span>·</span>
+              <RuntimeBadge minutes={episode.runtime} />
             </div>
           </div>
-        </div>
+        </Link>
       ))}
 
-      {/* Render grouped episodes without still_path */}
+      {/* Grouped episodes without stills */}
       {Object.values(groupedByShow).map((episodes, idx) => {
         const show = episodes[0].showData;
         if (!show) return null;
 
         return (
-          <div
+          <Link
             key={`group-${idx}`}
-            className="flex gap-4 items-start p-2 border-b border-gray-200"
+            to={`/tv/${show.id}`}
+            className="group flex gap-0 bg-slate-800 rounded-xl overflow-hidden border border-slate-700 hover:border-slate-500 transition-all duration-200 hover:shadow-lg hover:shadow-black/30"
           >
-            {/* Show poster */}
-            <img
-              src={`${BASE_IMAGE_URL}/w500${show.poster_path}`}
-              alt={show.name}
-              className="w-64 h-auto rounded-md object-cover flex-shrink-0"
-            />
-
-            {/* List of upcoming episodes */}
-            <div className="flex flex-col gap-2">
-              {episodes.map((episode, eIdx) => (
-                <div key={eIdx}>
-                  <Link to={`/tv/${episode.showData.id}`}>
-                    <div className="font-semibold text-gray-900">
-                      {show.name} - S{episode.season_number}E
-                      {episode.episode_number} - {episode.name}
-                    </div>
-                  </Link>
-                  <div className="text-gray-500 text-xs mt-1">
-                    Air date: {formatDate(episode.air_date)} | Runtime:{" "}
-                    {episode.runtime ? (
-                      <>
-                        {Math.floor(episode.runtime / 60) > 0 &&
-                          `${Math.floor(episode.runtime / 60)}h `}
-                        {episode.runtime % 60 > 0 && `${episode.runtime % 60}m`}
-                      </>
-                    ) : (
-                      "N/A"
-                    )}
-                  </div>
+            <div className="relative w-24 sm:w-32 flex-shrink-0">
+              {show.poster_path ? (
+                <img
+                  src={`${BASE_IMAGE_URL}/w300${show.poster_path}`}
+                  alt={show.name}
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                <div className="h-full w-full bg-slate-700 flex items-center justify-center">
+                  <span className="text-slate-400 text-xs text-center px-2">{show.name}</span>
                 </div>
-              ))}
+              )}
             </div>
-          </div>
+
+            <div className="flex flex-col justify-center px-4 py-3 min-w-0 flex-1">
+              <div className="flex items-center gap-2 mb-1">
+                <TypeBadge type="tv" />
+              </div>
+              <div className="font-semibold text-slate-100 group-hover:text-blue-300 transition-colors">
+                {show.name}
+              </div>
+              <div className="mt-1.5 flex flex-col gap-1">
+                {episodes.map((episode, eIdx) => (
+                  <div key={eIdx} className="text-sm text-slate-400">
+                    <span className="text-slate-500 text-xs mr-1.5">
+                      S{episode.season_number}E{episode.episode_number}
+                    </span>
+                    {episode.name}
+                    <span className="text-slate-600 mx-1.5">·</span>
+                    <span className="text-slate-500 text-xs">
+                      <RuntimeBadge minutes={episode.runtime} />
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </Link>
         );
       })}
 
+      {/* Movies */}
       {movies.map((movie) => (
-        <div
+        <Link
           key={movie.id}
-          className="flex gap-4 items-start p-2 border-b border-gray-200"
+          to={`/movie/${movie.id}`}
+          className="group flex gap-0 bg-slate-800 rounded-xl overflow-hidden border border-slate-700 hover:border-slate-500 transition-all duration-200 hover:shadow-lg hover:shadow-black/30"
         >
-          <img
-            src={`${BASE_IMAGE_URL}/w500${movie.poster_path}`}
-            alt={movie.title}
-            className="w-64 h-auto rounded-md object-cover flex-shrink-0"
-          />
-          <div className="flex flex-col">
-            <Link to={`/movie/${movie.id}`}>
-              <div className="font-semibold text-gray-900">{movie.title}</div>
-            </Link>
-            <div className="text-gray-700 text-sm mt-1">{movie.overview}</div>
-            <div className="text-gray-500 text-xs mt-1">
-              Release date: {movie.release_date} | Runtime:{" "}
-              {movie.runtime ? (
-                <>
-                  {Math.floor(movie.runtime / 60) > 0 &&
-                    `${Math.floor(movie.runtime / 60)}h `}
-                  {movie.runtime % 60 > 0 && `${movie.runtime % 60}m`}
-                </>
-              ) : (
-                "N/A"
-              )}
+          <div className="relative w-24 sm:w-32 flex-shrink-0">
+            {movie.poster_path ? (
+              <img
+                src={`${BASE_IMAGE_URL}/w300${movie.poster_path}`}
+                alt={movie.title}
+                className="h-full w-full object-cover"
+              />
+            ) : (
+              <div className="h-full w-full bg-slate-700 flex items-center justify-center">
+                <span className="text-slate-400 text-xs text-center px-2">{movie.title}</span>
+              </div>
+            )}
+          </div>
+
+          <div className="flex flex-col justify-center px-4 py-3 min-w-0 flex-1">
+            <div className="flex items-center gap-2 mb-1">
+              <TypeBadge type="movie" />
+            </div>
+            <div className="font-semibold text-slate-100 group-hover:text-blue-300 transition-colors line-clamp-1">
+              {movie.title}
+            </div>
+            {movie.overview && (
+              <p className="text-slate-500 text-xs mt-1.5 line-clamp-2 hidden sm:block">
+                {movie.overview}
+              </p>
+            )}
+            <div className="flex items-center gap-3 text-slate-500 text-xs mt-2">
+              <span>{formatDate(movie.release_date)}</span>
+              <span>·</span>
+              <RuntimeBadge minutes={movie.runtime} />
             </div>
           </div>
-        </div>
+        </Link>
       ))}
-    </>
+    </div>
   );
 }

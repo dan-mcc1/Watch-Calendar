@@ -10,6 +10,7 @@ class EpisodeWatched(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(String, ForeignKey("user.id"))
     show_id = Column(Integer, ForeignKey("show.id"))
+    episode_id = Column(Integer, ForeignKey("episode.id"), nullable=True)
     season_number = Column(Integer)
     episode_number = Column(Integer)
     watched_at = Column(DateTime(timezone=True), server_default=func.now())

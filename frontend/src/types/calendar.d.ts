@@ -83,6 +83,7 @@ export type Movie = {
 
   bg_color?: string;
   popularity?: number;
+  isWatched?: boolean;
 }
 
 export type Genre = {

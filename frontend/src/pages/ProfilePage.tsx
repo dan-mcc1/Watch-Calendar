@@ -91,14 +91,14 @@ export default function ProfilePage() {
       {/* Stats / Lists */}
       <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Watchlist */}
-        <div className="bg-white rounded-lg shadow p-4">
-          <h2 className="text-lg font-semibold mb-4">Watchlist</h2>
+        <div className="bg-slate-800 rounded-lg p-4">
+          <h2 className="text-lg font-semibold mb-4 text-white">Watchlist</h2>
 
           {/* Movies */}
           {watchlist.movies.length > 0 && (
             <div key="watchlist-movies">
-              <h3 className="text-xl font-semibold mb-2">Movies</h3>
-              <div className="flex gap-4 overflow-x-auto">
+              <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-400 mb-2">Movies</h3>
+              <div className="flex gap-4 overflow-x-auto pb-1">
                 {watchlist.movies.slice(0, 5).map((movie) => (
                   <div key={movie.id} className="flex-shrink-0 w-32">
                     <Link to={`/movie/${movie.id}`}>
@@ -111,7 +111,7 @@ export default function ProfilePage() {
                         alt={movie.title}
                         className="w-full h-auto rounded-md object-cover"
                       />
-                      <p className="mt-1 text-sm font-medium text-gray-900 text-center">
+                      <p className="mt-1 text-sm font-medium text-slate-200 text-center">
                         {movie.title}
                       </p>
                     </Link>
@@ -124,8 +124,8 @@ export default function ProfilePage() {
           {/* TV Shows */}
           {watchlist.shows.length > 0 && (
             <div key="watchlist-shows" className="mt-4">
-              <h3 className="text-xl font-semibold mb-2">TV Shows</h3>
-              <div className="flex gap-4 overflow-x-auto">
+              <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-400 mb-2">TV Shows</h3>
+              <div className="flex gap-4 overflow-x-auto pb-1">
                 {watchlist.shows.slice(0, 5).map((show) => (
                   <div key={show.id} className="flex-shrink-0 w-32">
                     <Link to={`/tv/${show.id}`}>
@@ -138,7 +138,7 @@ export default function ProfilePage() {
                         alt={show.name}
                         className="w-full h-auto rounded-md object-cover"
                       />
-                      <p className="mt-1 text-sm font-medium text-gray-900 text-center">
+                      <p className="mt-1 text-sm font-medium text-slate-200 text-center">
                         {show.name}
                       </p>
                     </Link>
@@ -147,23 +147,23 @@ export default function ProfilePage() {
               </div>
               <Link
                 to="/watchlist"
-                className="text-indigo-600 hover:text-indigo-500 font-medium mt-2 inline-block"
+                className="text-blue-400 hover:text-blue-300 font-medium mt-2 inline-block text-sm"
               >
-                View full watchlist
+                View full watchlist →
               </Link>
             </div>
           )}
         </div>
 
         {/* Watched */}
-        <div className="bg-white rounded-lg shadow p-4">
-          <h2 className="text-lg font-semibold mb-4">Watched</h2>
+        <div className="bg-slate-800 rounded-lg p-4">
+          <h2 className="text-lg font-semibold mb-4 text-white">Watched</h2>
 
           {/* Movies */}
           {watched.movies.length > 0 && (
             <div key="watched-movies">
-              <h3 className="text-xl font-semibold mb-2">Movies</h3>
-              <div className="flex gap-4 overflow-x-auto">
+              <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-400 mb-2">Movies</h3>
+              <div className="flex gap-4 overflow-x-auto pb-1">
                 {watched.movies.slice(0, 5).map((movie) => (
                   <div key={movie.id} className="flex-shrink-0 w-32">
                     <Link to={`/movie/${movie.id}`}>
@@ -176,7 +176,7 @@ export default function ProfilePage() {
                         alt={movie.title}
                         className="w-full h-auto rounded-md object-cover"
                       />
-                      <p className="mt-1 text-sm font-medium text-gray-900 text-center">
+                      <p className="mt-1 text-sm font-medium text-slate-200 text-center">
                         {movie.title}
                       </p>
                     </Link>
@@ -189,8 +189,8 @@ export default function ProfilePage() {
           {/* TV Shows */}
           {watched.shows.length > 0 && (
             <div key="watched-shows" className="mt-4">
-              <h3 className="text-xl font-semibold mb-2">TV Shows</h3>
-              <div className="flex gap-4 overflow-x-auto">
+              <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-400 mb-2">TV Shows</h3>
+              <div className="flex gap-4 overflow-x-auto pb-1">
                 {watched.shows.slice(0, 5).map((show) => (
                   <div key={show.id} className="flex-shrink-0 w-32">
                     <Link to={`/tv/${show.id}`}>
@@ -203,7 +203,7 @@ export default function ProfilePage() {
                         alt={show.name}
                         className="w-full h-auto rounded-md object-cover"
                       />
-                      <p className="mt-1 text-sm font-medium text-gray-900 text-center">
+                      <p className="mt-1 text-sm font-medium text-slate-200 text-center">
                         {show.name}
                       </p>
                     </Link>
@@ -212,9 +212,9 @@ export default function ProfilePage() {
               </div>
               <Link
                 to="/watched"
-                className="text-indigo-600 hover:text-indigo-500 font-medium mt-2 inline-block"
+                className="text-blue-400 hover:text-blue-300 font-medium mt-2 inline-block text-sm"
               >
-                View full watched list
+                View full watched list →
               </Link>
             </div>
           )}

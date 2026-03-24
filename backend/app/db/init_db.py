@@ -7,6 +7,7 @@ from app.models.user import User
 from app.models.show import Show
 from app.models.movie import Movie
 from app.models.watchlist import Watchlist
+from app.models.episode import Episode
 from app.models.episode_watched import EpisodeWatched
 from app.models.watched import Watched
 

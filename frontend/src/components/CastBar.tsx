@@ -20,7 +20,7 @@ export default function CastBar({ cast }: CastBarProps) {
         {cast.map((actor, index) => (
           <div
             key={index}
-            className="flex-shrink-0 w-32 bg-white rounded-lg shadow-md hover:shadow-xl transition-shadow duration-300 cursor-pointer"
+            className="flex-shrink-0 w-32 bg-slate-700 rounded-lg shadow-md hover:shadow-xl transition-shadow duration-300 cursor-pointer"
             title={actor.character}
           >
             <Link to={`/person/${actor.id}`}>
@@ -31,13 +31,13 @@ export default function CastBar({ cast }: CastBarProps) {
                   className="w-32 h-40 object-cover rounded-t-lg"
                 />
               ) : (
-                <div className="w-32 h-40 bg-gray-200 rounded-t-lg flex items-center justify-center text-xs text-gray-500">
+                <div className="w-32 h-40 bg-slate-600 rounded-t-lg flex items-center justify-center text-xs text-slate-400">
                   No Image
                 </div>
               )}
               <div className="p-2 text-center">
-                <p className="text-sm font-semibold truncate">{actor.name}</p>
-                <p className="text-xs text-gray-500 truncate">
+                <p className="text-sm font-semibold truncate text-white">{actor.name}</p>
+                <p className="text-xs text-slate-400 truncate">
                   {actor.character}
                 </p>
               </div>

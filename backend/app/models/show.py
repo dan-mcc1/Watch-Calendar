@@ -1,6 +1,5 @@
 # src/models/show.py
 from sqlalchemy import Column, Integer, String, Boolean, Date, Text, JSON
-from sqlalchemy.dialects.postgresql import ARRAY
 from app.db.base import Base
 
 

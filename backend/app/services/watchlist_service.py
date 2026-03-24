@@ -6,8 +6,11 @@ from app.models.watchlist import Watchlist
 from app.models.watched import Watched
 from app.models.movie import Movie
 from app.models.show import Show
+from app.models.episode import Episode
+from app.models.episode_watched import EpisodeWatched
 from app.services.tmdb_movies import fetch_movie_from_tmdb
 from app.services.tmdb_tv import fetch_show_from_tmdb
+from app.services.episode_service import maybe_sync_show_episodes
 from functools import lru_cache
 
 
@@ -130,6 +133,11 @@ def add_to_watchlist(db: Session, user_id: str, content_type: str, content_id: i
 
     db.commit()
     db.refresh(entry)
+
+    # Sync all episodes into the episode table so they're available for tracking
+    if content_type == "tv":
+        maybe_sync_show_episodes(db, content_id)
+
     return entry
 
 
@@ -174,6 +182,9 @@ def remove_from_watchlist(
             )
 
         if show.tracking_count <= 0 and not watched_exists:
+            # Delete child rows first to satisfy FK constraints
+            db.query(EpisodeWatched).filter_by(show_id=content_id).delete()
+            db.query(Episode).filter_by(show_id=content_id).delete()
             db.delete(show)
 
     db.commit()

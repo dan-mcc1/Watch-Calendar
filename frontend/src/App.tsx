@@ -17,8 +17,8 @@ import ProfilePage from "./pages/ProfilePage";
 function App() {
   return (
     <BrowserRouter>
-      <NavBar />
-      <div className="p-6">
+      <div className="min-h-screen bg-slate-950 text-slate-100">
+        <NavBar />
         <Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="/search" element={<Search />} />

@@ -1,8 +1,9 @@
-from fastapi import APIRouter, Depends, Body
+from fastapi import APIRouter, Depends, Body, BackgroundTasks
 from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.services.watched_service import (
     add_to_watched,
+    sync_watched_episodes_bg,
     get_watched,
     remove_from_watched,
     get_watched_movies_info,
@@ -15,12 +16,16 @@ router = APIRouter()
 
 @router.post("/add")
 def add_item(
+    background_tasks: BackgroundTasks,
     content_type: str = Body(...),
     content_id: int = Body(...),
     db: Session = Depends(get_db),
-    uid: str = Depends(get_current_user),  # secure current user
+    uid: str = Depends(get_current_user),
 ):
-    return add_to_watched(db, uid, content_type, content_id)
+    result = add_to_watched(db, uid, content_type, content_id)
+    if content_type == "tv":
+        background_tasks.add_task(sync_watched_episodes_bg, uid, content_id)
+    return result
 
 
 @router.delete("/remove")

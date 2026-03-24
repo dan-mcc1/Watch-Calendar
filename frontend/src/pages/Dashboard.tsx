@@ -18,6 +18,7 @@ export default function Dashboard() {
     shows: [],
     movies: [],
   });
+  const [watchedEpisodeKeys, setWatchedEpisodeKeys] = useState<Set<string>>(new Set());
   const [showWatchlist, setShowWatchlist] = useState(false);
 
   const auth = getAuth(firebaseApp);
@@ -27,18 +28,11 @@ export default function Dashboard() {
     if (!token) return [];
 
     const res = await fetch(`${API_URL}/watchlist/tv`, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
+      headers: { Authorization: `Bearer ${token}` },
     });
 
-    if (!res.ok) {
-      throw new Error("Failed to fetch watchlist");
-    }
-
-    const items = await res.json();
-    // Maybe change to just tv shows later?
-    return items;
+    if (!res.ok) throw new Error("Failed to fetch watchlist");
+    return res.json();
   }
 
   useEffect(() => {
@@ -87,6 +81,32 @@ export default function Dashboard() {
     return res.json();
   }
 
+  async function fetchWatchedMovies(): Promise<Movie[]> {
+    const token = await auth.currentUser?.getIdToken();
+    if (!token) return [];
+
+    const res = await fetch(`${API_URL}/watched/movie`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    if (!res.ok) return [];
+    return res.json();
+  }
+
+  async function fetchWatchedEpisodeKeys(): Promise<Set<string>> {
+    const token = await auth.currentUser?.getIdToken();
+    if (!token) return new Set();
+
+    const res = await fetch(`${API_URL}/watched-episode/`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    if (!res.ok) return new Set();
+    const data: { show_id: number; season_number: number; episode_number: number }[] =
+      await res.json();
+    return new Set(data.map((e) => `${e.show_id}_${e.season_number}_${e.episode_number}`));
+  }
+
   useEffect(() => {
     if (!user) {
       setCalendarData({ shows: [], movies: [] });
@@ -96,18 +116,27 @@ export default function Dashboard() {
     async function fetchAllCalendarDataFromUser() {
       setLoading(true);
       try {
-        // 1️⃣ Get TV IDs from backend watchlist
-        const tvWatchlist: Show[] = await fetchUserTVWatchlist();
-        const movies: Movie[] = await fetchMovieCalendar();
+        const [tvWatchlist, watchlistMovies, watchedMovies, episodeKeys] =
+          await Promise.all([
+            fetchUserTVWatchlist(),
+            fetchMovieCalendar(),
+            fetchWatchedMovies(),
+            fetchWatchedEpisodeKeys(),
+          ]);
 
-        // 2️⃣ Fetch TV calendars (cached)
+        // Merge watchlist + watched movies; watched movies take precedence
+        const movieMap = new Map<number, Movie>();
+        for (const m of watchlistMovies) movieMap.set(m.id, { ...m, isWatched: false });
+        for (const m of watchedMovies) movieMap.set(m.id, { ...m, isWatched: true });
+
         const showResults = await Promise.all(
           tvWatchlist.map((item) => fetchShowCalendarCached(item))
         );
 
+        setWatchedEpisodeKeys(episodeKeys);
         setCalendarData({
           shows: showResults.filter(Boolean) as ShowWithCalendar[],
-          movies,
+          movies: Array.from(movieMap.values()),
         });
       } catch (err) {
         console.error(err);
@@ -152,6 +181,7 @@ export default function Dashboard() {
             showWatchlist={showWatchlist}
             setShowWatchlist={setShowWatchlist}
             user={user}
+            watchedEpisodeKeys={watchedEpisodeKeys}
           />
           {/* {user && (
             <WatchlistModal

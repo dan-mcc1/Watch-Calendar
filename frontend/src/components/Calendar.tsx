@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import type { Show, Movie, Episode, CalendarData } from "../types/calendar";
 import "react-datepicker/dist/react-datepicker.css";
 import WatchlistModal from "./WatchlistModal";
@@ -17,10 +17,11 @@ interface CalendarProps {
   showWatchlist: boolean;
   setShowWatchlist: React.Dispatch<React.SetStateAction<boolean>>;
   user: User | null;
+  watchedEpisodeKeys?: Set<string>;
 }
 
 export type CalendarItem =
-  | (Episode & { type: "tv"; showData: Show }) // episodes from shows
+  | (Episode & { type: "tv"; showData: Show })
   | {
       id: number;
       title: string;
@@ -31,7 +32,9 @@ export type CalendarItem =
       showData: Movie;
       type: "movie";
       runtime: number;
-    }; // movies
+    };
+
+export type ViewMode = "month" | "week" | "day";
 
 export default function CalendarComponent({
   calendarData = { shows: [], movies: [] },
@@ -39,6 +42,7 @@ export default function CalendarComponent({
   showWatchlist = false,
   setShowWatchlist,
   user,
+  watchedEpisodeKeys = new Set(),
 }: CalendarProps) {
   const allItems: CalendarItem[] = [
     ...calendarData.shows.flatMap((show) =>
@@ -57,15 +61,39 @@ export default function CalendarComponent({
       bg_color: movie.bg_color,
       showData: movie,
       type: "movie" as const,
-      air_date: movie.release_date, // optional, for calendar date lookup
+      air_date: movie.release_date,
       runtime: movie.runtime,
     })),
   ];
 
   const [filterType, setFilterType] = useState<"all" | "tv" | "movie">("all");
+  const [watchFilter, setWatchFilter] = useState<"all" | "watched" | "unwatched">("all");
+  const [viewMode, setViewMode] = useState<ViewMode>("month");
+  const [showFilters, setShowFilters] = useState(false);
+  const filterRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (filterRef.current && !filterRef.current.contains(e.target as Node)) {
+        setShowFilters(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const isItemWatched = (item: CalendarItem): boolean => {
+    if (item.type === "movie") return item.showData.isWatched === true;
+    return watchedEpisodeKeys.has(
+      `${item.show_id}_${item.season_number}_${item.episode_number}`
+    );
+  };
+
   const getFilteredItems = (items: CalendarItem[]) => {
-    if (filterType === "all") return items;
-    return items.filter((item) => item.type === filterType);
+    let filtered = filterType === "all" ? items : items.filter((item) => item.type === filterType);
+    if (watchFilter === "watched") filtered = filtered.filter(isItemWatched);
+    if (watchFilter === "unwatched") filtered = filtered.filter((item) => !isItemWatched(item));
+    return filtered;
   };
 
   const today = new Date();
@@ -77,34 +105,28 @@ export default function CalendarComponent({
     items: allItems,
   });
 
-  function setItemsForDay(date: Date) {
+  function getItemsForDate(date: Date): CalendarItem[] {
     const isoDate = date.toISOString().split("T")[0];
-    const itemsForDay = getFilteredItems(
+    return getFilteredItems(
       allItems.filter(
         (item) =>
           (item.type === "tv" && item.air_date === isoDate) ||
           (item.type === "movie" && item.release_date === isoDate)
       )
     );
-    setSelectedDate({ date, items: itemsForDay });
   }
 
-  const handleDateChange = (date: Date) => {
-    setCurrentMonth(date.getMonth());
-    setCurrentYear(date.getFullYear());
-
-    setItemsForDay(date);
-  };
+  function setItemsForDay(date: Date) {
+    setSelectedDate({ date, items: getItemsForDate(date) });
+  }
 
   const handleGoToToday = () => {
     const todayDate = new Date();
     setCurrentMonth(todayDate.getMonth());
     setCurrentYear(todayDate.getFullYear());
-
     setItemsForDay(todayDate);
   };
 
-  // Generate all days for the current month
   const getDaysInMonth = (month: number, year: number) => {
     const date = new Date(year, month, 1);
     const days: Day[] = [];
@@ -123,23 +145,68 @@ export default function CalendarComponent({
     return days;
   };
 
+  const getWeekDays = (): Day[] => {
+    const date = selectedDate.date;
+    const start = new Date(date);
+    start.setDate(date.getDate() - date.getDay());
+    return Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(start);
+      d.setDate(start.getDate() + i);
+      return { date: d, items: getItemsForDate(d) };
+    });
+  };
+
   const firstDayOfWeek = new Date(currentYear, currentMonth, 1).getDay();
 
   const handlePrevMonth = () => {
-    if (currentMonth === 0) {
-      setCurrentMonth(11);
-      setCurrentYear(currentYear - 1);
-    } else {
-      setCurrentMonth(currentMonth - 1);
-    }
+    const newMonth = currentMonth === 0 ? 11 : currentMonth - 1;
+    const newYear = currentMonth === 0 ? currentYear - 1 : currentYear;
+    setCurrentMonth(newMonth);
+    setCurrentYear(newYear);
+    setItemsForDay(new Date(newYear, newMonth, 1));
   };
 
   const handleNextMonth = () => {
-    if (currentMonth === 11) {
-      setCurrentMonth(0);
-      setCurrentYear(currentYear + 1);
+    const newMonth = currentMonth === 11 ? 0 : currentMonth + 1;
+    const newYear = currentMonth === 11 ? currentYear + 1 : currentYear;
+    setCurrentMonth(newMonth);
+    setCurrentYear(newYear);
+    setItemsForDay(new Date(newYear, newMonth, 1));
+  };
+
+  const handlePrev = () => {
+    if (viewMode === "month") {
+      handlePrevMonth();
+    } else if (viewMode === "week") {
+      const newDate = new Date(selectedDate.date);
+      newDate.setDate(newDate.getDate() - 7);
+      setCurrentMonth(newDate.getMonth());
+      setCurrentYear(newDate.getFullYear());
+      setItemsForDay(newDate);
     } else {
-      setCurrentMonth(currentMonth + 1);
+      const newDate = new Date(selectedDate.date);
+      newDate.setDate(newDate.getDate() - 1);
+      setCurrentMonth(newDate.getMonth());
+      setCurrentYear(newDate.getFullYear());
+      setItemsForDay(newDate);
+    }
+  };
+
+  const handleNext = () => {
+    if (viewMode === "month") {
+      handleNextMonth();
+    } else if (viewMode === "week") {
+      const newDate = new Date(selectedDate.date);
+      newDate.setDate(newDate.getDate() + 7);
+      setCurrentMonth(newDate.getMonth());
+      setCurrentYear(newDate.getFullYear());
+      setItemsForDay(newDate);
+    } else {
+      const newDate = new Date(selectedDate.date);
+      newDate.setDate(newDate.getDate() + 1);
+      setCurrentMonth(newDate.getMonth());
+      setCurrentYear(newDate.getFullYear());
+      setItemsForDay(newDate);
     }
   };
 
@@ -152,125 +219,270 @@ export default function CalendarComponent({
   }, [currentMonth, currentYear, calendarData]);
 
   const monthNames = [
-    "January",
-    "February",
-    "March",
-    "April",
-    "May",
-    "June",
-    "July",
-    "August",
-    "September",
-    "October",
-    "November",
-    "December",
+    "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December",
   ];
 
-  //   const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
   const dayNames = [
-    ["S", "un"],
-    ["M", "on"],
-    ["T", "ue"],
-    ["W", "ed"],
-    ["Th", "u"],
-    ["F", "ri"],
-    ["S", "at"],
+    ["S", "un"], ["M", "on"], ["T", "ue"], ["W", "ed"],
+    ["Th", "u"], ["F", "ri"], ["S", "at"],
   ];
 
-  // // Index episodes by date for fast lookup
-  // const episodesByDate: Record<string, { date: string; title?: string }[]> = {};
-  // episodes.forEach((ep) => {
-  //   const d = ep.air_date.split("T")[0];
-  //   episodesByDate[d] ??= [];
-  //   episodesByDate[d].push(ep);
-  // });
+  const getCenterLabel = (): string => {
+    if (viewMode === "month") {
+      return `${monthNames[currentMonth]} ${currentYear}`;
+    } else if (viewMode === "week") {
+      const days = getWeekDays();
+      const start = days[0].date;
+      const end = days[6].date;
+      if (start.getMonth() === end.getMonth()) {
+        return `${monthNames[start.getMonth()]} ${start.getDate()} – ${end.getDate()}, ${start.getFullYear()}`;
+      }
+      return `${monthNames[start.getMonth()].slice(0, 3)} ${start.getDate()} – ${monthNames[end.getMonth()].slice(0, 3)} ${end.getDate()}, ${end.getFullYear()}`;
+    } else {
+      return selectedDate.date.toLocaleDateString(undefined, {
+        weekday: "short",
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+      });
+    }
+  };
 
-  // Fill empty cells before first day of month
   const emptyCells = Array(firstDayOfWeek).fill(null);
+
+  // Count upcoming items this month for the header stat
+  const upcomingThisMonth = allItems.filter((item) => {
+    const dateStr = item.type === "tv" ? item.air_date : item.release_date;
+    if (!dateStr) return false;
+    const d = new Date(dateStr);
+    return d >= today && d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+  }).length;
+
+  const DayCell = ({
+    day,
+    isCompact = false,
+  }: {
+    day: Day;
+    isCompact?: boolean;
+  }) => {
+    const isToday = day.date.toDateString() === today.toDateString();
+    const isSelected = selectedDate.date.toDateString() === day.date.toDateString();
+    const isoDate = day.date.toISOString().split("T")[0];
+    const cellItems = getFilteredItems(
+      allItems.filter(
+        (item) =>
+          (item.type === "tv" && item.air_date === isoDate) ||
+          (item.type === "movie" && item.release_date === isoDate)
+      )
+    );
+
+    return (
+      <div
+        onClick={() => setItemsForDay(day.date)}
+        className={`relative px-2 py-2 overflow-y-auto border border-slate-700/50 cursor-pointer transition-colors duration-150 ${
+          isCompact ? "min-h-32" : "min-h-48"
+        } ${
+          isToday
+            ? "bg-blue-700 font-bold"
+            : isSelected
+            ? "bg-slate-700 ring-2 ring-inset ring-blue-500"
+            : "bg-slate-800 hover:bg-slate-750"
+        }`}
+        style={!isToday && !isSelected ? { backgroundColor: 'rgb(28 36 52)' } : undefined}
+      >
+        <time
+          dateTime={isoDate}
+          className={`text-sm font-semibold ${
+            isToday ? "text-white" : isSelected ? "text-blue-300" : "text-slate-300"
+          }`}
+        >
+          {day.date.getDate()}
+        </time>
+
+        {cellItems.map((item, idx) => {
+          const title =
+            "episode_number" in item
+              ? `${item.showData.name} - ${item.name}`
+              : item.title;
+
+          return (
+            <div
+              key={idx}
+              className="relative mt-1 h-14 rounded-md overflow-hidden group"
+            >
+              {item.showData.backdrop_path && (
+                <img
+                  src={`${BASE_IMAGE_URL}/w780${item.showData.backdrop_path}`}
+                  alt=""
+                  className="absolute inset-0 h-full w-full object-cover"
+                />
+              )}
+              <div className="absolute inset-0 bg-black/50" />
+              <div className="relative z-10 flex h-full items-center justify-center px-1">
+                {item.showData.logo_path ? (
+                  <img
+                    src={`${BASE_IMAGE_URL}/w300${item.showData.logo_path}`}
+                    alt={title}
+                    className="max-h-9 object-contain drop-shadow-md"
+                  />
+                ) : (
+                  <span className="text-white text-[9px] font-semibold text-center line-clamp-2 drop-shadow">
+                    {title}
+                  </span>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
 
   return (
     <div className="lg:flex lg:h-full lg:flex-col max-w-7xl mx-auto">
-      {/* Top bar */}
-      <header className="flex items-center justify-between border-b border-gray-200 px-6 py-4 bg-white">
-        {/* Left: Calendar title */}
-        <div className="text-4xl font-semibold text-[#1f3b4d]">
-          Watch Calendar
+      {/* Header */}
+      <header className="flex items-center justify-between border-b border-slate-700 px-6 py-4 bg-slate-900">
+        <div className="flex items-center gap-3">
+          <span className="text-2xl font-bold text-white">Watch Calendar</span>
+          {viewMode === "month" && upcomingThisMonth > 0 && (
+            <span className="hidden sm:inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-600/20 text-blue-400 border border-blue-600/30">
+              {upcomingThisMonth} upcoming
+            </span>
+          )}
         </div>
-
-        {/* Right: Today button */}
         <button
           onClick={handleGoToToday}
-          className="rounded-md bg-blue-700 px-4 py-1.5 text-md font-semibold text-white hover:bg-indigo-500"
+          className="rounded-lg bg-blue-600 px-4 py-1.5 text-sm font-semibold text-white hover:bg-blue-500 transition-colors"
         >
-          Go To Today
+          Today
         </button>
       </header>
 
-      {/* Media type filter bar */}
-      {/* <div className="flex px-6 py-3 border-b border-gray-200 bg-gray-50">
-        <div className="inline-flex overflow-hidden rounded-lg border border-gray-300 bg-white">
-          {[
-            { label: "All", value: "all" },
-            { label: "Movies", value: "movie" },
-            { label: "TV Shows", value: "tv" },
-          ].map((btn, idx, arr) => {
-            const isActive = filterType === btn.value;
-            const isFirst = idx === 0;
-            const isLast = idx === arr.length - 1;
+      {/* Controls bar */}
+      <div className="relative flex items-center gap-2 px-4 py-2.5 border-b border-slate-700 bg-slate-900">
+        {/* LEFT: view toggle + filter dropdown */}
+        <div className="flex items-center gap-2">
+          {/* View mode */}
+          <div className="inline-flex rounded-lg border border-slate-600 overflow-hidden">
+            {(["day", "week", "month"] as ViewMode[]).map((mode, idx, arr) => (
+              <button
+                key={mode}
+                onClick={() => setViewMode(mode)}
+                className={`px-3 py-1.5 text-sm font-medium capitalize transition-colors
+                  ${viewMode === mode ? "bg-blue-600 text-white" : "bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white"}
+                  ${idx < arr.length - 1 ? "border-r border-slate-600" : ""}
+                `}
+              >
+                {mode.charAt(0).toUpperCase() + mode.slice(1)}
+              </button>
+            ))}
+          </div>
 
-            return (
-              <button
-                key={btn.value}
-                onClick={() => {
-                  setFilterType(btn.value as "all" | "movie" | "tv");
-                  setItemsForDay(selectedDate.date);
-                }}
-                className={`
-          px-5 py-2 text-sm font-medium transition
-          ${isActive ? "bg-blue-700 text-white" : "text-gray-700 hover:bg-gray-100"}
-          ${!isLast ? "border-r border-gray-300" : ""}
-          ${isFirst ? "rounded-l-lg" : ""}
-          ${isLast ? "rounded-r-lg" : ""}
-        `}
-              >
-                {btn.label}
-              </button>
-            );
-          })}
-        </div>
-        <div className="flex items-center">
-          <div className="absolute left-1/2 transform -translate-x-1/2">
-            <div className="relative flex items-center rounded-md bg-white shadow-sm md:items-stretch">
-              <button
-                onClick={handlePrevMonth}
-                type="button"
-                className="flex h-9 w-12 items-center justify-center rounded-l-md border-y border-l border-gray-300 pr-1 text-gray-400 hover:text-gray-500 focus:relative md:w-9 md:pr-0 md:hover:bg-gray-50"
-              >
-                {"<"}
-              </button>
-              <button
-                type="button"
-                className="h-9 items-center border-y border-gray-300 px-3.5 text-sm font-semibold text-gray-900 hover:bg-gray-50 focus:relative flex"
-              >
-                {monthNames[currentMonth]} {currentYear}
-              </button>
-              <span className="relative -mx-px h-5 w-px bg-gray-300 md:hidden"></span>
-              <button
-                onClick={handleNextMonth}
-                type="button"
-                className="flex h-9 w-12 items-center justify-center rounded-r-md border-y border-r border-gray-300 pl-1 text-gray-400 hover:text-gray-500 focus:relative md:w-9 md:pl-0 md:hover:bg-gray-50"
-              >
-                {">"}
-              </button>
-            </div>
+          {/* Filter dropdown */}
+          <div className="relative" ref={filterRef}>
+            <button
+              onClick={() => setShowFilters((v) => !v)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg border transition-colors
+                ${showFilters ? "bg-slate-700 border-slate-500 text-white" : "bg-slate-800 border-slate-600 text-slate-300 hover:bg-slate-700 hover:text-white"}
+              `}
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 4h18M7 8h10M11 12h2" />
+              </svg>
+              Filter
+              {(filterType !== "all" || watchFilter !== "all") && (
+                <span className="w-2 h-2 rounded-full bg-blue-400" />
+              )}
+            </button>
+
+            {showFilters && (
+              <div className="absolute left-0 top-full mt-1.5 z-20 w-56 rounded-xl border border-slate-600 bg-slate-800 shadow-xl p-3 flex flex-col gap-3">
+                <div>
+                  <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Type</p>
+                  <div className="inline-flex rounded-lg border border-slate-600 overflow-hidden w-full">
+                    {(["all", "movie", "tv"] as const).map((value, idx, arr) => {
+                      const label = value === "all" ? "All" : value === "movie" ? "Movies" : "TV";
+                      return (
+                        <button
+                          key={value}
+                          onClick={() => { setFilterType(value); setItemsForDay(selectedDate.date); }}
+                          className={`flex-1 py-1.5 text-sm font-medium transition-colors
+                            ${filterType === value ? "bg-blue-600 text-white" : "bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white"}
+                            ${idx < arr.length - 1 ? "border-r border-slate-600" : ""}
+                          `}
+                        >
+                          {label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div>
+                  <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Status</p>
+                  <div className="inline-flex rounded-lg border border-slate-600 overflow-hidden w-full">
+                    {(["all", "unwatched", "watched"] as const).map((value, idx, arr) => {
+                      const label = value === "all" ? "All" : value === "watched" ? "Watched" : "Unwatched";
+                      return (
+                        <button
+                          key={value}
+                          onClick={() => { setWatchFilter(value); setItemsForDay(selectedDate.date); }}
+                          className={`flex-1 py-1.5 text-sm font-medium transition-colors
+                            ${watchFilter === value ? "bg-emerald-600 text-white" : "bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white"}
+                            ${idx < arr.length - 1 ? "border-r border-slate-600" : ""}
+                          `}
+                        >
+                          {label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {(filterType !== "all" || watchFilter !== "all") && (
+                  <button
+                    onClick={() => { setFilterType("all"); setWatchFilter("all"); setItemsForDay(selectedDate.date); }}
+                    className="text-xs text-slate-400 hover:text-white transition-colors text-left"
+                  >
+                    Clear filters
+                  </button>
+                )}
+              </div>
+            )}
           </div>
         </div>
-        <div className="md:ml-4 md:flex md:items-center">
+
+        {/* CENTER: Period navigation */}
+        <div className="absolute left-1/2 -translate-x-1/2 flex items-center gap-1">
+          <button
+            onClick={handlePrev}
+            className="h-8 w-8 flex items-center justify-center text-slate-400 hover:text-white hover:bg-slate-700 rounded-lg transition-colors"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+            </svg>
+          </button>
+          <div className="px-3 text-base font-semibold text-slate-100 whitespace-nowrap min-w-[180px] text-center">
+            {getCenterLabel()}
+          </div>
+          <button
+            onClick={handleNext}
+            className="h-8 w-8 flex items-center justify-center text-slate-400 hover:text-white hover:bg-slate-700 rounded-lg transition-colors"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+            </svg>
+          </button>
+        </div>
+
+        {/* RIGHT: Watchlist */}
+        <div className="ml-auto">
           {user && (
             <>
               <button
                 onClick={() => setShowWatchlist(true)}
-                className="ml-2 rounded-md bg-indigo-600 px-3 py-1 text-sm font-semibold text-white hover:bg-indigo-500"
+                className="rounded-lg bg-slate-700 border border-slate-600 px-3 py-1.5 text-sm font-medium text-slate-200 hover:bg-slate-600 hover:text-white transition-colors"
               >
                 Watchlist
               </button>
@@ -283,246 +495,125 @@ export default function CalendarComponent({
             </>
           )}
         </div>
-      </div> */}
-
-      <div className="relative flex items-center px-4 py-3 border-b border-gray-200 bg-gray-50">
-        {/* LEFT: Filters */}
-        <div className="flex items-center gap-2 lg:gap-4">
-          {/* Full buttons for large screens */}
-          <div>Filter:</div>
-          <div className="hidden lg:inline-flex overflow-hidden rounded-lg border border-gray-300 bg-white">
-            {["all", "movie", "tv"].map((value, idx, arr) => {
-              const label =
-                value === "all"
-                  ? "All"
-                  : value === "movie"
-                    ? "Movies"
-                    : "TV Shows";
-              const isActive = filterType === value;
-              const isFirst = idx === 0;
-              const isLast = idx === arr.length - 1;
-              return (
-                <button
-                  key={value}
-                  onClick={() => {
-                    setFilterType(value as "all" | "movie" | "tv");
-                    setItemsForDay(selectedDate.date);
-                  }}
-                  className={`
-              px-5 py-2 text-sm font-medium transition
-              ${isActive ? "bg-blue-700 text-white" : "text-gray-700 hover:bg-gray-100"}
-              ${!isLast ? "border-r border-gray-300" : ""}
-              ${isFirst ? "rounded-l-lg" : ""}
-              ${isLast ? "rounded-r-lg" : ""}
-            `}
-                >
-                  {label}
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Dropdown for small screens */}
-          <select
-            className="lg:hidden border border-gray-300 rounded-md bg-white px-3 py-1 text-sm"
-            value={filterType}
-            onChange={(e) => {
-              setFilterType(e.target.value as "all" | "movie" | "tv");
-              setItemsForDay(selectedDate.date);
-            }}
-          >
-            <option value="all">All</option>
-            <option value="movie">Movies</option>
-            <option value="tv">TV Shows</option>
-          </select>
-        </div>
-
-        {/* CENTER: Month selector */}
-        <div className="absolute left-1/2 transform -translate-x-1/2 flex items-center gap-1 ">
-          <button
-            onClick={handlePrevMonth}
-            className="h-9 w-9 flex items-center justify-center text-2xl rounded-l-md text-[#1f3b4d] hover:text-[#1f3b4d]/70"
-          >
-            {"<"}
-          </button>
-          <div className="h-9 px-3 flex items-center text-2xl text-[#1f3b4d] gap-2">
-            <div className="font-semibold">{monthNames[currentMonth]}</div>
-            <div>{currentYear}</div>
-          </div>
-          <button
-            onClick={handleNextMonth}
-            className="h-9 w-9 flex items-center justify-center text-2xl rounded-r-md text-[#1f3b4d] hover:text-[#1f3b4d]/70"
-          >
-            {">"}
-          </button>
-        </div>
-
-        {/* RIGHT: Watchlist */}
-        <div className="ml-auto flex items-center">
-          {user && (
-            <>
-              <button
-                onClick={() => setShowWatchlist(true)}
-                className="rounded-md bg-blue-700 px-3 py-1 text-sm==md font-semibold text-white hover:bg-indigo-500"
-              >
-                View Watchlist
-              </button>
-              <WatchlistModal
-                isOpen={showWatchlist}
-                onClose={() => setShowWatchlist(false)}
-                setCalendarData={setCalendarData}
-                calendarData={calendarData}
-              />
-            </>
-          )}
-        </div>
       </div>
 
-      <div className="shadow ring-opacity-5 lg:flex lg:flex-auto lg:flex-col">
-        {/* Days of the week */}
-        <div className="grid grid-cols-7 gap-px text-center text-md font-semibold leading-6 text-gray-700 lg:flex-none">
-          {dayNames.map(([letter, full], i) => {
-            return (
-              <div key={i} className="flex justify-center bg-white py-2">
-                <span>{letter}</span>
-                <span className="sr-only sm:not-sr-only">{full}</span>
+      {/* ── MONTH VIEW ── */}
+      {viewMode === "month" && (
+        <div className="flex flex-auto flex-col">
+          <div className="grid grid-cols-7 text-center text-xs font-semibold uppercase tracking-wider text-slate-500 bg-slate-900 border-b border-slate-700">
+            {dayNames.map(([letter, full], i) => (
+              <div key={i} className="py-2.5">
+                <span className="sm:hidden">{letter}</span>
+                <span className="hidden sm:inline">{letter}{full}</span>
               </div>
-            );
-          })}
-        </div>
-
-        {/* Days grid */}
-        <div className="flex ring-1 ring-black bg-gray-200 text-xs leading-6 text-gray-700 flex-auto">
-          <div className="w-full grid grid-cols-7 grid-rows-* gap-0">
-            {emptyCells.map((_, idx) => (
-              <div
-                key={`empty-${idx}`}
-                className="relative bg-gray-50 px-3 py-2 text-gray-500 min-h-[8rem] max-h-[16rem] overflow-y-auto border-1 border-solid"
-              />
             ))}
-            {daysOfMonth.map((day) => {
+          </div>
+
+          <div className="flex-auto bg-slate-700 grid-rows-auto">
+            <div className="w-full grid grid-cols-7 gap-px">
+              {emptyCells.map((_, idx) => (
+                <div
+                  key={`empty-${idx}`}
+                  className="bg-slate-950 min-h-[8rem] max-h-[14rem]"
+                />
+              ))}
+              {daysOfMonth.map((day) => (
+                <DayCell key={day.date.toISOString()} day={day} isCompact />
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── WEEK VIEW ── */}
+      {viewMode === "week" && (
+        <div className="flex flex-auto flex-col">
+          <div className="grid grid-cols-7 border-b border-slate-700 bg-slate-900">
+            {getWeekDays().map((day, i) => {
               const isToday = day.date.toDateString() === today.toDateString();
-              const isoDate = day.date.toISOString().split("T")[0];
-              const todaysItems = getFilteredItems(
-                allItems.filter(
-                  (item) =>
-                    (item.type === "tv" && item.air_date === isoDate) ||
-                    (item.type === "movie" && item.release_date === isoDate)
-                )
-              );
               return (
                 <div
-                  key={day.date.toISOString()}
-                  onClick={() => {
-                    setSelectedDate(day);
-                  }}
-                  className={`relative px-3 py-2 text-gray-500 min-h-[8rem] max-h-[16rem] overflow-y-auto border-1 border-solid ${
-                    isToday
-                      ? "bg-blue-700 text-white font-bold"
-                      : selectedDate.date.toDateString() ===
-                          day.date.toDateString()
-                        ? "bg-indigo-100 border-2 border-blue-700"
-                        : "bg-white"
+                  key={i}
+                  className={`flex flex-col items-center py-3 border-r border-slate-700 last:border-r-0 ${
+                    isToday ? "bg-blue-600/20" : ""
                   }`}
                 >
-                  <time dateTime={isoDate}>{day.date.getDate()}</time>
-
-                  {todaysItems.map((item, idx) => {
-                    const isEpisode = "episode_number" in item;
-                    const title =
-                      "episode_number" in item
-                        ? `${item.showData.name} - ${item.name}`
-                        : item.title;
-
-                    return (
-                      <div
-                        key={idx}
-                        className="relative mt-1 h-16 rounded overflow-hidden cursor-pointer group"
-                      >
-                        {/* Backdrop */}
-                        {item.showData.backdrop_path && (
-                          <img
-                            src={`${BASE_IMAGE_URL}/w780${item.showData.backdrop_path}`}
-                            alt=""
-                            className="absolute inset-0 h-full w-full object-cover opacity-80"
-                          />
-                        )}
-
-                        {/* Dark overlay */}
-                        <div className="absolute inset-0 bg-black/40" />
-
-                        {/* Logo or fallback text */}
-                        <div className="relative z-10 flex h-full items-center justify-center px-2">
-                          {/* <div className="rounded-md bg-black/5 backdrop-blur-sm p-2"> */}
-                          {item.showData.logo_path ? (
-                            <img
-                              src={`${BASE_IMAGE_URL}/w300${item.showData.logo_path}`}
-                              alt={title}
-                              className="max-h-10 object-contain"
-                            />
-                          ) : (
-                            <span className="text-white text-[10px] font-semibold text-center line-clamp-2">
-                              {title}
-                            </span>
-                          )}
-                          {/* </div> */}
-                        </div>
-                      </div>
-                    );
-
-                    // if (isEpisode) {
-                    //   // TV episode rendering
-                    //   return (
-                    //     <div
-                    //       key={idx}
-                    //       className="flex-auto truncate font-medium text-gray-900 group-hover:text-indigo-600"
-                    //       style={{
-                    //         backgroundColor:
-                    //           item.showData.bg_color ?? "transparent",
-                    //       }}
-                    //     >
-                    //       {item.showData.name} - {item.name}
-                    //     </div>
-                    //   );
-                    // } else {
-                    //   // Movie rendering
-                    //   return (
-                    //     <div
-                    //       key={idx}
-                    //       className="flex-auto truncate font-medium text-gray-900 group-hover:text-indigo-600"
-                    //       style={{
-                    //         backgroundColor:
-                    //           item.showData.bg_color ?? "transparent",
-                    //       }}
-                    //     >
-                    //       {item.title}
-                    //     </div>
-                    //   );
-                    // }
-                  })}
+                  <span className={`text-xs uppercase tracking-wide font-medium ${isToday ? "text-blue-400" : "text-slate-500"}`}>
+                    {dayNames[i][0]}{dayNames[i][1]}
+                  </span>
+                  <span className={`mt-1 text-xl font-bold ${isToday ? "text-blue-400" : "text-slate-200"}`}>
+                    {day.date.getDate()}
+                  </span>
                 </div>
               );
             })}
           </div>
+
+          <div className="flex-auto bg-slate-700">
+            <div className="w-full grid grid-cols-7 gap-px">
+              {getWeekDays().map((day) => (
+                <DayCell key={day.date.toISOString()} day={day} />
+              ))}
+            </div>
+          </div>
         </div>
-      </div>
+      )}
 
-      <div className="mt-4 mb-2 text-lg font-semibold text-gray-800">
-        {selectedDate.date.toLocaleDateString(undefined, {
-          weekday: "long",
-          year: "numeric",
-          month: "long",
-          day: "numeric",
-        })}
-      </div>
+      {/* ── SELECTED DAY DETAIL (month & week views) ── */}
+      {viewMode !== "day" && (
+        <div className="border-t border-slate-700 bg-slate-900/50 px-6 py-6">
+          <div className="flex items-center gap-3 mb-4">
+            <h2 className="text-lg font-semibold text-slate-100">
+              {selectedDate.date.toLocaleDateString(undefined, {
+                weekday: "long",
+                year: "numeric",
+                month: "long",
+                day: "numeric",
+              })}
+            </h2>
+            {selectedDate.items && selectedDate.items.length > 0 && (
+              <span className="text-xs text-slate-400 bg-slate-800 border border-slate-700 px-2 py-0.5 rounded-full">
+                {getFilteredItems(selectedDate.items).length} item{getFilteredItems(selectedDate.items).length !== 1 ? "s" : ""}
+              </span>
+            )}
+          </div>
+          <div className="flex flex-col gap-3">
+            {selectedDate.items && selectedDate.items.length > 0 ? (
+              <DailyEpisodeList dailyItems={getFilteredItems(selectedDate.items)} />
+            ) : (
+              <p className="text-slate-500 italic">Nothing scheduled for this day.</p>
+            )}
+          </div>
+        </div>
+      )}
 
-      <div className="flex flex-col gap-4 mt-2">
-        {selectedDate.items && selectedDate.items.length > 0 ? (
-          <DailyEpisodeList dailyItems={getFilteredItems(selectedDate.items)} />
-        ) : (
-          <div className="text-gray-500 italic">Nothing on this day.</div>
-        )}
-      </div>
+      {/* ── DAY VIEW ── */}
+      {viewMode === "day" && (
+        <div className="px-6 py-6">
+          <div className="flex items-center gap-3 mb-4">
+            <h2 className="text-xl font-semibold text-slate-100">
+              {selectedDate.date.toLocaleDateString(undefined, {
+                weekday: "long",
+                year: "numeric",
+                month: "long",
+                day: "numeric",
+              })}
+            </h2>
+            {selectedDate.items && selectedDate.items.length > 0 && (
+              <span className="text-xs text-slate-400 bg-slate-800 border border-slate-700 px-2 py-0.5 rounded-full">
+                {getFilteredItems(selectedDate.items).length} item{getFilteredItems(selectedDate.items).length !== 1 ? "s" : ""}
+              </span>
+            )}
+          </div>
+          <div className="flex flex-col gap-3">
+            {selectedDate.items && selectedDate.items.length > 0 ? (
+              <DailyEpisodeList dailyItems={getFilteredItems(selectedDate.items)} />
+            ) : (
+              <p className="text-slate-500 italic">Nothing scheduled for this day.</p>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

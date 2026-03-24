@@ -77,116 +77,142 @@ export default function WatchlistModal({
 
   const handleAddShows = async () => {
     onClose();
-    navigate("/search");
+    navigate("/trending");
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="bg-white w-11/12 md:w-2/3 max-h-[80vh] overflow-y-auto rounded-lg shadow-lg p-6 relative">
-        <button
-          onClick={onClose}
-          className="absolute top-4 right-4 text-gray-500 hover:text-gray-700 text-xl font-bold"
-        >
-          &times;
-        </button>
-        <div className="mb-6">
-          <h2 className="text-2xl font-bold mb-4">My Watchlist</h2>
-          <button
-            onClick={handleAddShows}
-            className="ml-2 rounded-md bg-indigo-600 px-3 py-1 text-sm font-semibold text-white hover:bg-indigo-500"
-          >
-            Add Shows
-          </button>
-          <div>Filter: </div>
-          <select
-            value={filter}
-            onChange={(e) =>
-              setFilter(e.target.value as "all" | "tv" | "movies")
-            }
-            className="border px-2 py-1 rounded"
-          >
-            <option value="all">All</option>
-            <option value="tv">Shows</option>
-            <option value="movies">Movies</option>
-          </select>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+      <div className="bg-slate-900 border border-slate-700 w-11/12 md:w-2/3 lg:w-1/2 max-h-[80vh] flex flex-col rounded-xl shadow-2xl">
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-700 flex-shrink-0">
+          <h2 className="text-xl font-bold text-white">My Watchlist</h2>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleAddShows}
+              className="rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-blue-500 transition-colors"
+            >
+              + Add
+            </button>
+            <button
+              onClick={onClose}
+              className="h-8 w-8 flex items-center justify-center rounded-lg text-slate-400 hover:text-white hover:bg-slate-700 transition-colors text-lg font-bold"
+            >
+              &times;
+            </button>
+          </div>
         </div>
 
-        {showsToDisplay.length === 0 && moviesToDisplay.length === 0 ? (
-          <p>Your watchlist is empty.</p>
-        ) : (
-          <div className="flex flex-col gap-4">
-            {showsToDisplay.map((showWithCal) => {
-              const show = showWithCal.show;
+        {/* Filter tabs */}
+        <div className="px-6 pt-4 pb-3 flex-shrink-0">
+          <div className="inline-flex rounded-lg border border-slate-600 overflow-hidden">
+            {(["all", "tv", "movies"] as const).map((value, idx, arr) => {
+              const label =
+                value === "all"
+                  ? "All"
+                  : value === "tv"
+                    ? "TV Shows"
+                    : "Movies";
               return (
-                <div
-                  key={`tv-${show.id}`}
-                  className="flex gap-4 items-start p-4 border rounded-md shadow-sm relative"
+                <button
+                  key={value}
+                  onClick={() => setFilter(value)}
+                  className={`px-4 py-1.5 text-sm font-medium transition-colors
+                    ${filter === value ? "bg-blue-600 text-white" : "bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white"}
+                    ${idx < arr.length - 1 ? "border-r border-slate-600" : ""}
+                  `}
                 >
-                  {show.poster_path && (
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Scrollable content */}
+        <div className="overflow-y-auto flex-1 px-6 pb-6">
+          {showsToDisplay.length === 0 && moviesToDisplay.length === 0 ? (
+            <p className="text-slate-500 italic py-4">
+              Your watchlist is empty.
+            </p>
+          ) : (
+            <div className="flex flex-col gap-3">
+              {showsToDisplay.map((showWithCal) => {
+                const show = showWithCal.show;
+                return (
+                  <div
+                    key={`tv-${show.id}`}
+                    className="flex gap-4 items-start p-4 bg-slate-800 border border-slate-700 rounded-xl"
+                  >
+                    {show.poster_path && (
+                      <img
+                        src={`${BASE_IMAGE_URL}/w154${show.poster_path}`}
+                        alt={show.name}
+                        className="w-16 h-auto rounded-lg object-cover flex-shrink-0"
+                      />
+                    )}
+                    <div className="flex flex-col flex-1 min-w-0">
+                      <div className="flex justify-between items-start gap-2">
+                        <Link to={`/tv/${show.id}`} onClick={onClose}>
+                          <h3 className="font-semibold text-slate-100 hover:text-blue-400 transition-colors line-clamp-1">
+                            {show.name}
+                          </h3>
+                        </Link>
+                        <button
+                          onClick={() => handleRemove("tv", show.id)}
+                          className="flex-shrink-0 h-6 w-6 flex items-center justify-center rounded-md text-slate-500 hover:text-red-400 hover:bg-slate-700 transition-colors text-lg leading-none"
+                        >
+                          &times;
+                        </button>
+                      </div>
+                      <p className="text-slate-400 text-xs mt-1 line-clamp-2">
+                        {show.overview || "No overview available."}
+                      </p>
+                      <div className="text-slate-500 text-xs mt-1.5">
+                        First aired: {show.first_air_date}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+
+              {moviesToDisplay.map((movie) => (
+                <div
+                  key={`movie-${movie.id}`}
+                  className="flex gap-4 items-start p-4 bg-slate-800 border border-slate-700 rounded-xl"
+                >
+                  {movie.poster_path && (
                     <img
-                      src={`${BASE_IMAGE_URL}/w154${show.poster_path}`}
-                      alt={show.name}
-                      className="w-24 h-auto rounded-md object-cover flex-shrink-0"
+                      src={`${BASE_IMAGE_URL}/w154${movie.poster_path}`}
+                      alt={movie.title}
+                      className="w-16 h-auto rounded-lg object-cover flex-shrink-0"
                     />
                   )}
-                  <div className="flex flex-col flex-1">
-                    <div className="flex justify-between items-start">
-                      <Link to={`/tv/${show.id}`}>
-                        <h3 className="font-semibold text-lg">{show.name}</h3>
+                  <div className="flex flex-col flex-1 min-w-0">
+                    <div className="flex justify-between items-start gap-2">
+                      <Link to={`/movie/${movie.id}`} onClick={onClose}>
+                        <h3 className="font-semibold text-slate-100 hover:text-blue-400 transition-colors line-clamp-1">
+                          {movie.title}
+                        </h3>
                       </Link>
                       <button
-                        onClick={() => handleRemove("tv", show.id)}
-                        className="text-red-600 hover:text-red-800 font-bold"
+                        onClick={() => handleRemove("movie", movie.id)}
+                        className="flex-shrink-0 h-6 w-6 flex items-center justify-center rounded-md text-slate-500 hover:text-red-400 hover:bg-slate-700 transition-colors text-lg leading-none"
                       >
                         &times;
                       </button>
                     </div>
-                    <p className="text-gray-700 text-sm mt-1">
-                      {show.overview || "No overview available."}
+                    <p className="text-slate-400 text-xs mt-1 line-clamp-2">
+                      {movie.overview || "No overview available."}
                     </p>
-                    <div className="text-gray-500 text-xs mt-1">
-                      First air date: {show.first_air_date}
+                    <div className="text-slate-500 text-xs mt-1.5">
+                      Release: {movie.release_date}
                     </div>
                   </div>
                 </div>
-              );
-            })}
-
-            {moviesToDisplay.map((movie) => (
-              <div
-                key={`movie-${movie.id}`}
-                className="flex gap-4 items-start p-4 border rounded-md shadow-sm relative"
-              >
-                {movie.poster_path && (
-                  <img
-                    src={`${BASE_IMAGE_URL}/w154${movie.poster_path}`}
-                    alt={movie.title}
-                    className="w-24 h-auto rounded-md object-cover flex-shrink-0"
-                  />
-                )}
-                <div className="flex flex-col flex-1">
-                  <div className="flex justify-between items-start">
-                    <Link to={`/movie/${movie.id}`}>
-                      <h3 className="font-semibold text-lg">{movie.title}</h3>
-                    </Link>
-                    <button
-                      onClick={() => handleRemove("movie", movie.id)}
-                      className="text-red-600 hover:text-red-800 font-bold"
-                    >
-                      &times;
-                    </button>
-                  </div>
-                  <p className="text-gray-700 text-sm mt-1">
-                    {movie.overview || "No overview available."}
-                  </p>
-                  <div className="text-gray-500 text-xs mt-1">
-                    Release date: {movie.release_date}
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

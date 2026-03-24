@@ -1,6 +1,5 @@
 # src/models/movie.py
 from sqlalchemy import Column, Integer, String, Text, Date, Float, JSON
-from sqlalchemy.dialects.postgresql import ARRAY
 from app.db.base import Base
 
 

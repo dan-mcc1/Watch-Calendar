@@ -6,6 +6,9 @@ from app.services.watched_episode_service import (
     add_episode_watched,
     remove_episode_watched,
     get_watched_episodes,
+    get_watched_episodes_by_show,
+    add_season_watched,
+    remove_season_watched,
 )
 from app.dependencies.auth import get_current_user
 
@@ -43,3 +46,35 @@ def get_user_watched_episodes(
     uid: str = Depends(get_current_user),
 ):
     return get_watched_episodes(db, uid)
+
+
+# Mark all episodes in a season as watched
+@router.post("/season/add")
+def add_season(
+    show_id: int,
+    season_number: int,
+    db: Session = Depends(get_db),
+    uid: str = Depends(get_current_user),
+):
+    return add_season_watched(db, uid, show_id, season_number)
+
+
+# Remove all episodes in a season from watched
+@router.delete("/season/remove")
+def remove_season(
+    show_id: int,
+    season_number: int,
+    db: Session = Depends(get_db),
+    uid: str = Depends(get_current_user),
+):
+    return remove_season_watched(db, uid, show_id, season_number)
+
+
+# Get watched episodes for the current user for a specific show
+@router.get("/{show_id}")
+def get_watched_episodes_for_show(
+    show_id: int,
+    db: Session = Depends(get_db),
+    uid: str = Depends(get_current_user),
+):
+    return get_watched_episodes_by_show(db, uid, show_id)

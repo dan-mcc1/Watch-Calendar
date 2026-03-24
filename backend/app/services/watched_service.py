@@ -8,6 +8,10 @@ from app.models.show import Show
 from app.services.tmdb_tv import fetch_show_from_tmdb
 from app.services.tmdb_movies import fetch_movie_from_tmdb
 from app.services.watchlist_service import get_theatrical_release_date
+from app.services.episode_service import sync_show_episodes
+from app.models.episode import Episode
+from app.models.episode_watched import EpisodeWatched
+from app.db.session import SessionLocal
 
 
 def add_to_watched(
@@ -111,12 +115,51 @@ def add_to_watched(
 
     db.commit()
     db.refresh(entry)
+
     return entry
+
+
+def sync_watched_episodes_bg(user_id: str, content_id: int):
+    """
+    Background task: sync all episodes for a show then mark them all as watched.
+    Uses its own DB session so it can run after the request has returned.
+    """
+    db = SessionLocal()
+    try:
+        sync_show_episodes(db, content_id)
+        episodes = db.query(Episode).filter_by(show_id=content_id).all()
+        existing_keys = {
+            (row.season_number, row.episode_number)
+            for row in db.query(EpisodeWatched.season_number, EpisodeWatched.episode_number)
+            .filter_by(user_id=user_id, show_id=content_id)
+            .all()
+        }
+        new_rows = [
+            EpisodeWatched(
+                user_id=user_id,
+                show_id=content_id,
+                episode_id=ep.id,
+                season_number=ep.season_number,
+                episode_number=ep.episode_number,
+                watched_at=datetime.utcnow(),
+            )
+            for ep in episodes
+            if (ep.season_number, ep.episode_number) not in existing_keys
+        ]
+        if new_rows:
+            db.bulk_save_objects(new_rows)
+            db.commit()
+    except Exception as e:
+        db.rollback()
+        print(f"[sync_watched_episodes_bg] Error for show {content_id}: {e}")
+    finally:
+        db.close()
 
 
 def remove_from_watched(db: Session, user_id: str, content_type: str, content_id: int):
     """
-    Remove a movie from the watched list.
+    Remove a movie or show from the watched list.
+    For TV shows, also clears all episode_watched entries for that user+show.
     """
     entry = (
         db.query(Watched)
@@ -125,6 +168,10 @@ def remove_from_watched(db: Session, user_id: str, content_type: str, content_id
     )
     if entry:
         db.delete(entry)
+        if content_type == "tv":
+            db.query(EpisodeWatched).filter_by(
+                user_id=user_id, show_id=content_id
+            ).delete()
         db.commit()
         return {"message": "Removed from watched"}
     return {"message": "Not found in watched list"}
