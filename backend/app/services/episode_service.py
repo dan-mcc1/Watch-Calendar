@@ -35,8 +35,6 @@ def ensure_show_in_db(db: Session, show_id: int) -> bool:
         tagline=show_data.get("tagline"),
         overview=show_data.get("overview"),
         type=show_data.get("type"),
-        genres=show_data.get("genres"),
-        seasons=show_data.get("seasons"),
         first_air_date=show_data.get("first_air_date"),
         poster_path=show_data.get("poster_path"),
         tracking_count=0,
@@ -92,14 +90,17 @@ def sync_show_episodes(db: Session, show_id: int):
         return
 
     show = db.query(Show).filter_by(id=show_id).first()
-    if not show or not show.seasons:
+    if not show:
         return
 
-    for season in show.seasons:
-        season_number = season.get("season_number", 0)
-        if season_number == 0:
-            continue
+    # Use the season table if populated, otherwise fall back to number_of_seasons
+    if show.seasons:
+        season_numbers = [s.season_number for s in show.seasons if s.season_number > 0]
+    else:
+        n = show.number_of_seasons or 0
+        season_numbers = list(range(1, n + 1))
 
+    for season_number in season_numbers:
         try:
             season_data = get(f"/tv/{show_id}/season/{season_number}")
         except Exception:
@@ -114,8 +115,6 @@ def sync_show_episodes(db: Session, show_id: int):
             if existing:
                 continue
 
-            air_date_str = ep.get("air_date") or None
-
             episode = Episode(
                 id=ep_id,
                 show_id=show_id,
@@ -123,7 +122,7 @@ def sync_show_episodes(db: Session, show_id: int):
                 episode_number=ep.get("episode_number"),
                 name=ep.get("name"),
                 overview=ep.get("overview"),
-                air_date=air_date_str,
+                air_date=ep.get("air_date") or None,
                 runtime=ep.get("runtime"),
                 still_path=ep.get("still_path"),
                 vote_average=ep.get("vote_average"),

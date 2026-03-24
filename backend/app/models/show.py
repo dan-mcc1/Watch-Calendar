@@ -1,5 +1,5 @@
-# src/models/show.py
-from sqlalchemy import Column, Integer, String, Boolean, Date, Text, JSON
+from sqlalchemy import Column, Integer, String, Boolean, Date, Text
+from sqlalchemy.orm import relationship
 from app.db.base import Base
 
 
@@ -21,7 +21,8 @@ class Show(Base):
     status = Column(String)
     tagline = Column(String)
     type = Column(String)
-    genres = Column(JSON)  # list of genre ids
-    providers = Column(JSON)
     tracking_count = Column(Integer)
-    seasons = Column(JSON, nullable=True)
+
+    genres = relationship("Genre", secondary="show_genre", back_populates="shows")
+    show_providers = relationship("ShowProvider", back_populates="show")
+    seasons = relationship("Season", back_populates="show", cascade="all, delete-orphan", order_by="Season.season_number")

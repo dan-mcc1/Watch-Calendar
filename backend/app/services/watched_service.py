@@ -1,4 +1,4 @@
-# app/services/movie_watched_service.py
+# app/services/watched_service.py
 from sqlalchemy.orm import Session
 from sqlalchemy import and_
 from datetime import datetime
@@ -7,7 +7,18 @@ from app.models.movie import Movie
 from app.models.show import Show
 from app.services.tmdb_tv import fetch_show_from_tmdb
 from app.services.tmdb_movies import fetch_movie_from_tmdb
-from app.services.watchlist_service import get_theatrical_release_date
+from app.services.watchlist_service import (
+    get_theatrical_release_date,
+    serialize_show,
+    serialize_movie,
+    _upsert_genres_for_show,
+    _upsert_genres_for_movie,
+    _upsert_providers_for_show,
+    _upsert_providers_for_movie,
+    _upsert_seasons_for_show,
+    _show_query_options,
+    _movie_query_options,
+)
 from app.services.episode_service import sync_show_episodes
 from app.models.episode import Episode
 from app.models.episode_watched import EpisodeWatched
@@ -18,7 +29,7 @@ def add_to_watched(
     db: Session, user_id: str, content_type: str, content_id: int, rating: float = None
 ):
     """
-    Mark a movie as watched.
+    Mark a movie or show as watched.
     """
     existing = (
         db.query(Watched)
@@ -37,13 +48,11 @@ def add_to_watched(
     )
     db.add(entry)
 
-    # Increment tracking_count in content table
     if content_type == "movie":
         movie = db.query(Movie).filter_by(id=content_id).first()
         if movie:
             movie.tracking_count += 1
         else:
-            # Optional: fetch data from TMDb if needed
             movie_data = fetch_movie_from_tmdb(
                 content_id, "watch/providers,release_dates,images"
             )
@@ -62,7 +71,6 @@ def add_to_watched(
                 backdrop_path=movie_data.get("backdrop_path"),
                 logo_path=logo,
                 budget=movie_data.get("budget"),
-                genres=movie_data.get("genres"),
                 homepage=movie_data.get("homepage"),
                 tagline=movie_data.get("tagline"),
                 poster_path=movie_data.get("poster_path"),
@@ -72,10 +80,13 @@ def add_to_watched(
                 runtime=movie_data.get("runtime"),
                 status=movie_data.get("status"),
                 title=movie_data.get("title"),
-                providers=us_providers,
                 tracking_count=1,
             )
             db.add(movie)
+            db.flush()
+            _upsert_genres_for_movie(db, movie, movie_data.get("genres", []))
+            _upsert_providers_for_movie(db, movie, us_providers)
+
     elif content_type == "tv":
         show = db.query(Show).filter_by(id=content_id).first()
         if show:
@@ -92,7 +103,7 @@ def add_to_watched(
             logo = english_logos[0]["file_path"] if english_logos else None
             show = Show(
                 id=show_data["id"],
-                name=show_data["name"],  # required
+                name=show_data["name"],
                 backdrop_path=show_data.get("backdrop_path"),
                 logo_path=logo,
                 last_air_date=show_data.get("last_air_date"),
@@ -104,14 +115,15 @@ def add_to_watched(
                 tagline=show_data.get("tagline"),
                 overview=show_data.get("overview"),
                 type=show_data.get("type"),
-                genres=show_data.get("genres"),
-                seasons=show_data.get("seasons"),
                 first_air_date=show_data.get("first_air_date"),
                 poster_path=show_data.get("poster_path"),
-                providers=us_providers,
                 tracking_count=1,
             )
             db.add(show)
+            db.flush()
+            _upsert_genres_for_show(db, show, show_data.get("genres", []))
+            _upsert_providers_for_show(db, show, us_providers)
+            _upsert_seasons_for_show(db, show, show_data.get("seasons", []))
 
     db.commit()
     db.refresh(entry)
@@ -184,11 +196,9 @@ def get_watched(db: Session, user_id: str):
 
 
 def get_watched_movies_info(db: Session, user_id: str):
-    """
-    Get all watched movies for a user.
-    """
     items = (
         db.query(Movie)
+        .options(*_movie_query_options())
         .select_from(Watched)
         .join(
             Movie,
@@ -200,15 +210,13 @@ def get_watched_movies_info(db: Session, user_id: str):
         )
         .all()
     )
-    return [show for show in items]
+    return [serialize_movie(movie) for movie in items]
 
 
 def get_watched_tv_info(db: Session, user_id: str):
-    """
-    Get all watched movies for a user.
-    """
     items = (
         db.query(Show)
+        .options(*_show_query_options())
         .select_from(Watched)
         .join(
             Show,
@@ -220,4 +228,4 @@ def get_watched_tv_info(db: Session, user_id: str):
         )
         .all()
     )
-    return [show for show in items]
+    return [serialize_show(show) for show in items]

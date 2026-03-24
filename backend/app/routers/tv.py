@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Query, HTTPException, Depends
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 from app.services.tmdb_tv import (
     fetch_show_from_tmdb,
     get_popular_shows,
@@ -14,7 +14,9 @@ from app.services.tmdb_tv import (
 )
 from app.models.show import Show
 from app.models.episode import Episode
+from app.models.provider import ShowProvider
 from app.db.session import get_db
+from app.services.watchlist_service import serialize_show, _show_query_options
 
 router = APIRouter()
 
@@ -41,10 +43,15 @@ def get_show_info(
     append: str | None = Query(None, description="Comma-separated TMDB append fields"),
     db: Session = Depends(get_db),
 ):
-    # 1. Check DB first
-    show = db.query(Show).filter(Show.id == id).first()
+    # 1. Check DB first — load all relationships so serialize_show works
+    show = (
+        db.query(Show)
+        .options(*_show_query_options())
+        .filter(Show.id == id)
+        .first()
+    )
     if show:
-        return show
+        return serialize_show(show)
 
     # 2. Fetch from TMDb if not in DB
     show_data = fetch_show_from_tmdb(id, append)
@@ -72,10 +79,11 @@ def season_calendar(id: int, db: Session = Depends(get_db)):
     Return recent episodes for a show (last 2 seasons).
     Loads from the episode table when available, falls back to TMDB.
     """
-    show = db.query(Show).filter(Show.id == id).first()
+    show = db.query(Show).options(selectinload(Show.seasons)).filter(Show.id == id).first()
 
     if show:
-        seasons = show.seasons or []
+        # Convert Season ORM objects to dicts for consistent access below
+        seasons = [{"season_number": s.season_number} for s in show.seasons]
         show_id = show.id
     else:
         show_data = fetch_show_from_tmdb(id, append="seasons")
@@ -127,10 +135,11 @@ def full_calendar(id: int, db: Session = Depends(get_db)):
     Return seasons and episodes for a show.
     If the show is not in the DB, fetch from TMDb and store it.
     """
-    show = db.query(Show).filter(Show.id == id).first()
+    show = db.query(Show).options(selectinload(Show.seasons)).filter(Show.id == id).first()
 
     if show:
-        seasons = show.seasons
+        # Convert Season ORM objects to dicts for consistent access below
+        seasons = [{"season_number": s.season_number} for s in show.seasons]
         show_id = show.id
     else:
         show_data = fetch_show_from_tmdb(id, append="seasons")
@@ -143,7 +152,6 @@ def full_calendar(id: int, db: Session = Depends(get_db)):
     for season in seasons:
         calendar.append(fetch_season_data_from_tmdb(show_id, season["season_number"]))
 
-    # Return seasons from DB or from the JSON field
     return calendar
 
 
@@ -161,21 +169,21 @@ def full_season_info(id: int, season_number: int, db: Session = Depends(get_db))
     )
 
     if db_episodes:
-        # Pull season-level metadata (overview, poster) from show.seasons JSON
-        show = db.query(Show).filter_by(id=id).first()
-        season_meta = {}
-        if show and show.seasons:
+        # Pull season-level metadata from the season table
+        show = db.query(Show).options(selectinload(Show.seasons)).filter_by(id=id).first()
+        season_meta = None
+        if show:
             season_meta = next(
-                (s for s in show.seasons if s.get("season_number") == season_number),
-                {},
+                (s for s in show.seasons if s.season_number == season_number),
+                None,
             )
 
         return {
             "season_number": season_number,
-            "name": season_meta.get("name", f"Season {season_number}"),
-            "overview": season_meta.get("overview", ""),
-            "air_date": season_meta.get("air_date"),
-            "poster_path": season_meta.get("poster_path"),
+            "name": season_meta.name if season_meta else f"Season {season_number}",
+            "overview": season_meta.overview if season_meta else "",
+            "air_date": str(season_meta.air_date) if season_meta and season_meta.air_date else None,
+            "poster_path": season_meta.poster_path if season_meta else None,
             "episodes": [
                 {
                     "id": ep.id,

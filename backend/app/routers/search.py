@@ -9,18 +9,38 @@ from app.services.tmdb_search import (
     get_movie_upcoming,
     get_tv_upcoming,
     get_person_search_results,
+    get_genre_list,
+    get_tv_by_genre,
+    get_movie_by_genre,
 )
 
 router = APIRouter()
 
 
 @router.get("/")
-def search(query: str, type: str = "all"):
+def search(query: str = "", type: str = "all", genre_id: int = None):
+    # Genre mode: use TMDB /discover sorted by popularity
+    if genre_id:
+        return {
+            "movies": get_movie_by_genre(genre_id) if type in ("all", "movie") else [],
+            "shows": get_tv_by_genre(genre_id) if type in ("all", "tv") else [],
+            "people": [],
+        }
+
+    # Text search mode
+    if not query:
+        return {"movies": [], "shows": [], "people": []}
+
     return {
         "movies": get_movie_search_results(query) if type in ("all", "movie") else [],
         "shows": get_tv_search_results(query) if type in ("all", "tv") else [],
         "people": get_person_search_results(query) if type in ("all", "person") else [],
     }
+
+
+@router.get("/genres")
+def genres():
+    return get_genre_list()
 
 
 @router.get("/multi")

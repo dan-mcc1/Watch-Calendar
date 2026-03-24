@@ -1,5 +1,5 @@
-# src/models/movie.py
-from sqlalchemy import Column, Integer, String, Text, Date, Float, JSON
+from sqlalchemy import Column, Integer, String, Text, Date, Float
+from sqlalchemy.orm import relationship
 from app.db.base import Base
 
 
@@ -11,7 +11,6 @@ class Movie(Base):
     backdrop_path = Column(String)
     logo_path = Column(String)
     budget = Column(Float)
-    genres = Column(JSON)  # genre ids
     homepage = Column(String)
     overview = Column(Text)
     tagline = Column(String)
@@ -21,5 +20,7 @@ class Movie(Base):
     runtime = Column(Integer)
     status = Column(String)
     title = Column(String)
-    providers = Column(JSON)
     tracking_count = Column(Integer)
+
+    genres = relationship("Genre", secondary="movie_genre", back_populates="movies")
+    movie_providers = relationship("MovieProvider", back_populates="movie")

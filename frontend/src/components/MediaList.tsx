@@ -38,9 +38,9 @@ function MediaRow({ item, type }: { item: Movie | Show; type: "movie" | "tv" }) 
   const href = type === "movie" ? `/movie/${item.id}` : `/tv/${item.id}`;
 
   return (
-    <div className="flex gap-4 bg-slate-800/60 border border-slate-700 hover:border-slate-600 rounded-xl overflow-hidden transition-all duration-200 hover:bg-slate-800 hover:shadow-lg hover:shadow-black/30">
+    <div className="flex gap-4 bg-slate-800/60 border border-slate-700 hover:border-slate-600 rounded-xl transition-all duration-200 hover:bg-slate-800 hover:shadow-lg hover:shadow-black/30">
       {/* Thumbnail */}
-      <Link to={href} className="relative flex-shrink-0 w-36 sm:w-44">
+      <Link to={href} className="relative flex-shrink-0 w-36 sm:w-44 overflow-hidden rounded-l-xl">
         {item.backdrop_path ? (
           <img
             src={`${BASE_IMAGE_URL}/w300${item.backdrop_path}`}

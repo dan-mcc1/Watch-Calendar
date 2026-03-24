@@ -19,6 +19,7 @@ const navigation = [
   { name: "Watchlist", href: "/watchlist" },
   { name: "Watched", href: "/watched" },
   { name: "Trending", href: "/trending" },
+  { name: "Browse Genres", href: "/search-genres" },
 ];
 
 function classNames(...classes: string[]) {
@@ -103,7 +104,7 @@ export default function NavBar() {
                         isCurrent
                           ? "bg-gray-950/50 text-white"
                           : "text-gray-300 hover:bg-white/5 hover:text-white",
-                        "rounded-md px-3 py-2 text-sm font-medium"
+                        "rounded-md px-3 py-2 text-sm font-medium",
                       )}
                     >
                       {item.name}
@@ -219,7 +220,7 @@ export default function NavBar() {
                   isCurrent
                     ? "bg-gray-950/50 text-white"
                     : "text-gray-300 hover:bg-white/5 hover:text-white",
-                  "block rounded-md px-3 py-2 text-base font-medium"
+                  "block rounded-md px-3 py-2 text-base font-medium",
                 )}
               >
                 {item.name}

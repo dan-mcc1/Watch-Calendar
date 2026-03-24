@@ -10,6 +10,9 @@ from app.models.watchlist import Watchlist
 from app.models.episode import Episode
 from app.models.episode_watched import EpisodeWatched
 from app.models.watched import Watched
+from app.models.genre import Genre, ShowGenre, MovieGenre
+from app.models.provider import Provider, ShowProvider, MovieProvider
+from app.models.season import Season
 
 # add others as needed
 

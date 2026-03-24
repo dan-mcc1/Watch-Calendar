@@ -42,6 +42,31 @@ def get_person_search_results(query: str):
     )
 
 
+@lru_cache(maxsize=4)
+def get_genre_list():
+    movie_genres = get("/genre/movie/list").get("genres", [])
+    tv_genres = get("/genre/tv/list").get("genres", [])
+    return {"movie": movie_genres, "tv": tv_genres}
+
+
+@lru_cache(maxsize=1024)
+def get_tv_by_genre(genre_id: int):
+    data = get("/discover/tv", params={
+        "with_genres": genre_id,
+        "sort_by": "popularity.desc",
+    })
+    return data.get("results", [])
+
+
+@lru_cache(maxsize=1024)
+def get_movie_by_genre(genre_id: int):
+    data = get("/discover/movie", params={
+        "with_genres": genre_id,
+        "sort_by": "popularity.desc",
+    })
+    return data.get("results", [])
+
+
 @lru_cache(maxsize=1024)
 def get_multi_trending_results():
     return {
