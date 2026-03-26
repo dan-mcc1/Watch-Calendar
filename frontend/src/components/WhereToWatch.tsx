@@ -1,8 +1,58 @@
-import { Provider } from "../types/calendar";
+import { Provider, WatchProvider } from "../types/calendar";
 import { BASE_IMAGE_URL } from "../constants";
+import { getProviderUrl, getProviderDedupeKey } from "../utils/providerUrls";
+
+function deduplicateProviders(list: WatchProvider[]): WatchProvider[] {
+  const seen = new Set<string>();
+  return list.filter((p) => {
+    const key = getProviderDedupeKey(p.provider_id);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
 
 interface WhereToWatchProps {
   providers: Provider;
+}
+
+interface ProviderCardProps {
+  providerId: number;
+  providerName: string;
+  logoPath: string;
+  fallbackUrl?: string;
+}
+
+function ProviderCard({
+  providerId,
+  providerName,
+  logoPath,
+  fallbackUrl,
+}: ProviderCardProps) {
+  const url = getProviderUrl(providerId) ?? fallbackUrl;
+
+  const content = (
+    <div className="flex flex-col items-center gap-2" title={providerName}>
+      {logoPath && (
+        <img
+          src={`${BASE_IMAGE_URL}/w154${logoPath}`}
+          alt={providerName}
+          className="h-20 w-20 rounded"
+        />
+      )}
+      <span className="text-sm">{providerName}</span>
+    </div>
+  );
+
+  if (url) {
+    return (
+      <a href={url} target="_blank" rel="noopener noreferrer" key={providerId}>
+        {content}
+      </a>
+    );
+  }
+
+  return <div key={providerId}>{content}</div>;
 }
 
 export default function WhereToWatch({ providers }: WhereToWatchProps) {
@@ -13,21 +63,14 @@ export default function WhereToWatch({ providers }: WhereToWatchProps) {
         <div className="mb-4">
           <h3 className="font-medium mb-2">Streaming</h3>
           <div className="flex gap-4 flex-wrap">
-            {providers.flatrate.map((p) => (
-              <div
+            {deduplicateProviders(providers.flatrate).map((p) => (
+              <ProviderCard
                 key={p.provider_id}
-                className="flex flex-col items-center gap-2"
-                title={p.provider_name}
-              >
-                {p.logo_path && (
-                  <img
-                    src={`${BASE_IMAGE_URL}/w154${p.logo_path}`}
-                    alt={p.provider_name}
-                    className="h-20 w-20 rounded"
-                  />
-                )}
-                <span className="text-sm">{p.provider_name}</span>
-              </div>
+                providerId={p.provider_id}
+                providerName={p.provider_name}
+                logoPath={p.logo_path}
+                fallbackUrl={providers.link}
+              />
             ))}
           </div>
         </div>
@@ -37,13 +80,13 @@ export default function WhereToWatch({ providers }: WhereToWatchProps) {
         <div className="mb-4">
           <h3 className="font-medium mb-2">Rent</h3>
           <div className="flex gap-4 flex-wrap">
-            {providers.rent.map((p) => (
-              <img
+            {deduplicateProviders(providers.rent).map((p) => (
+              <ProviderCard
                 key={p.provider_id}
-                src={`${BASE_IMAGE_URL}/w154${p.logo_path}`}
-                alt={p.provider_name}
-                className="h-20 w-20 rounded"
-                title={p.provider_name}
+                providerId={p.provider_id}
+                providerName={p.provider_name}
+                logoPath={p.logo_path}
+                fallbackUrl={providers.link}
               />
             ))}
           </div>
@@ -54,13 +97,13 @@ export default function WhereToWatch({ providers }: WhereToWatchProps) {
         <div className="mb-4">
           <h3 className="font-medium mb-2">Buy</h3>
           <div className="flex gap-4 flex-wrap">
-            {providers.buy.map((p) => (
-              <img
+            {deduplicateProviders(providers.buy).map((p) => (
+              <ProviderCard
                 key={p.provider_id}
-                src={`${BASE_IMAGE_URL}/w154${p.logo_path}`}
-                alt={p.provider_name}
-                className="h-20 w-20 rounded"
-                title={p.provider_name}
+                providerId={p.provider_id}
+                providerName={p.provider_name}
+                logoPath={p.logo_path}
+                fallbackUrl={providers.link}
               />
             ))}
           </div>
