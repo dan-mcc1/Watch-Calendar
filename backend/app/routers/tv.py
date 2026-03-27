@@ -158,48 +158,6 @@ def full_calendar(id: int, db: Session = Depends(get_db)):
 @router.get("/{id}/season/{season_number}/info")
 def full_season_info(id: int, season_number: int, db: Session = Depends(get_db)):
     """
-    Return season metadata + episode list.
-    Loads episodes from the episode table when available, falls back to TMDB.
+    Return season metadata + full episode list from TMDB.
     """
-    db_episodes = (
-        db.query(Episode)
-        .filter_by(show_id=id, season_number=season_number)
-        .order_by(Episode.episode_number)
-        .all()
-    )
-
-    if db_episodes:
-        # Pull season-level metadata from the season table
-        show = db.query(Show).options(selectinload(Show.seasons)).filter_by(id=id).first()
-        season_meta = None
-        if show:
-            season_meta = next(
-                (s for s in show.seasons if s.season_number == season_number),
-                None,
-            )
-
-        return {
-            "season_number": season_number,
-            "name": season_meta.name if season_meta else f"Season {season_number}",
-            "overview": season_meta.overview if season_meta else "",
-            "air_date": str(season_meta.air_date) if season_meta and season_meta.air_date else None,
-            "poster_path": season_meta.poster_path if season_meta else None,
-            "episodes": [
-                {
-                    "id": ep.id,
-                    "show_id": ep.show_id,
-                    "season_number": ep.season_number,
-                    "episode_number": ep.episode_number,
-                    "name": ep.name,
-                    "air_date": str(ep.air_date) if ep.air_date else None,
-                    "runtime": ep.runtime,
-                    "still_path": ep.still_path,
-                    "overview": ep.overview,
-                    "vote_average": ep.vote_average,
-                }
-                for ep in db_episodes
-            ],
-        }
-
-    # Fall back to TMDB if episodes not yet synced
     return get_full_season_info(id, season_number)
