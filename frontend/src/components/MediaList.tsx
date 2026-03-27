@@ -1,6 +1,7 @@
 import { BASE_IMAGE_URL } from "../constants";
 import { Link } from "react-router-dom";
 import { Movie, Show, Person } from "../types/calendar";
+import { parseLocalDate } from "../utils/date";
 import { useState } from "react";
 import WatchButton from "./WatchButton";
 
@@ -11,6 +12,7 @@ interface MediaListProps {
     people?: Person[];
   };
   showWatchButton?: boolean;
+  showFullDate?: boolean;
 }
 
 const INITIAL_COUNT = 6;
@@ -27,16 +29,30 @@ const known_for_to_job: Record<string, string> = {
 
 function getYear(item: Movie | Show): string | null {
   const date = "release_date" in item ? item.release_date : item.first_air_date;
-  return date ? String(new Date(date).getFullYear()) : null;
+  return date ? String(parseLocalDate(date).getFullYear()) : null;
+}
+
+function formatFullDate(dateStr: string | null | undefined): string | null {
+  if (!dateStr) return null;
+  const [year, month, day] = dateStr.split("-").map(Number);
+  return new Date(year, month - 1, day).toLocaleDateString("en-us", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
 }
 
 // ── Media row card (movie / show) ──────────────────────────────────────────
 
-function MediaRow({ item, type, showWatchButton = true }: { item: Movie | Show; type: "movie" | "tv"; showWatchButton?: boolean }) {
+function MediaRow({ item, type, showWatchButton = true, showFullDate = false }: { item: Movie | Show; type: "movie" | "tv"; showWatchButton?: boolean; showFullDate?: boolean }) {
   const title = "title" in item ? item.title : item.name;
   const year = getYear(item);
   const genres: { id: number; name: string }[] = item.genres ?? [];
   const href = type === "movie" ? `/movie/${item.id}` : `/tv/${item.id}`;
+  const rawDate = showFullDate
+    ? ("release_date" in item ? item.release_date : item.first_air_date)
+    : null;
+  const releaseDate = rawDate ? formatFullDate(rawDate) : null;
 
   return (
     <div className="flex gap-4 bg-slate-800/60 border border-slate-700 hover:border-slate-600 rounded-xl transition-all duration-200 hover:bg-slate-800 hover:shadow-lg hover:shadow-black/30">
@@ -81,10 +97,13 @@ function MediaRow({ item, type, showWatchButton = true }: { item: Movie | Show; 
               </h3>
             </Link>
             <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-              {year && <span className="text-xs text-slate-500">{year}</span>}
+              {releaseDate
+                ? <span className="text-xs text-slate-500">{releaseDate}</span>
+                : year && <span className="text-xs text-slate-500">{year}</span>
+              }
               {genres.slice(0, 3).map((g, i) => (
                 <span key={g.id} className="flex items-center gap-2">
-                  {i > 0 || year ? <span className="text-slate-700">·</span> : null}
+                  {i > 0 || year || releaseDate ? <span className="text-slate-700">·</span> : null}
                   <span className="text-xs text-slate-500">{g.name}</span>
                 </span>
               ))}
@@ -203,7 +222,7 @@ function Section({
 
 // ── Main export ────────────────────────────────────────────────────────────
 
-export default function MediaList({ results, showWatchButton = true }: MediaListProps) {
+export default function MediaList({ results, showWatchButton = true, showFullDate = false }: MediaListProps) {
   const [visibleCounts, setVisibleCounts] = useState<Record<string, number>>({});
 
   const movies = results.movies ?? [];
@@ -239,7 +258,7 @@ export default function MediaList({ results, showWatchButton = true }: MediaList
             onToggle={() => toggle(section.key, section.items.length)}
           >
             {section.items.slice(0, visible).map((item) => (
-              <MediaRow key={item.id} item={item as Movie | Show} type={section.type} showWatchButton={showWatchButton} />
+              <MediaRow key={item.id} item={item as Movie | Show} type={section.type} showWatchButton={showWatchButton} showFullDate={showFullDate} />
             ))}
           </Section>
         );

@@ -36,7 +36,7 @@ def send_notification_email(to_email: str, username: str, upcoming_items: list):
     html_body = f"""
     <html><body>
     <h2>Hi {username or 'there'},</h2>
-    <p>Here's what's coming up on your Watch Calendar:</p>
+    <p>Here's what's releasing today on your Watch Calendar:</p>
     <ul>{items_html}</ul>
     <p><a href="{settings.FRONTEND_URL}">View your calendar</a></p>
     <p style="color:#888;font-size:12px;">
@@ -45,4 +45,4 @@ def send_notification_email(to_email: str, username: str, upcoming_items: list):
     </p>
     </body></html>
     """
-    send_email(to_email, "Your Watch Calendar — Upcoming This Week", html_body)
+    send_email(to_email, "Your Watch Calendar — Releasing Today", html_body)

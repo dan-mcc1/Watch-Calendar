@@ -64,12 +64,14 @@ export default function DailyEpisodeList({ dailyItems }: DailyItemListProps) {
     groupedByShow[showId].push(episode);
   });
 
-  const formatDate = (date: string) =>
-    new Date(date).toLocaleDateString("en-us", {
+  const formatDate = (date: string) => {
+    const [year, month, day] = date.split("-").map(Number);
+    return new Date(year, month - 1, day).toLocaleDateString("en-us", {
       month: "short",
       day: "numeric",
       year: "numeric",
     });
+  };
 
   return (
     <div className="flex flex-col gap-3">

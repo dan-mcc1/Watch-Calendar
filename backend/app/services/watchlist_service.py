@@ -246,16 +246,16 @@ def get_theatrical_release_date(movie_data: dict) -> str | None:
         None,
     )
 
-    if not us_entry:
-        return None
+    if us_entry:
+        # Prefer theatrical (3) > limited (2) > premiere (1) > digital (4)
+        for release_type in (3, 2, 1, 4):
+            for rd in us_entry.get("release_dates", []):
+                if rd.get("type") == release_type:
+                    raw = rd.get("release_date", "")
+                    return raw[:10] if raw else None
 
-    # Prefer theatrical > limited > premiere
-    for release_type in (3, 2, 1):
-        for rd in us_entry.get("release_dates", []):
-            if rd.get("type") == release_type:
-                return rd.get("release_date")
-
-    return None
+    # Fall back to TMDB's top-level release_date (always present)
+    return movie_data.get("release_date") or None
 
 
 # -------------------------

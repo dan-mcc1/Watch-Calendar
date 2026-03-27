@@ -1,5 +1,6 @@
 import asyncio
 from contextlib import asynccontextmanager
+from datetime import datetime, timedelta
 from fastapi import FastAPI
 from app.config import settings
 from app.routers import (
@@ -18,6 +19,7 @@ from app.routers import (
 from fastapi.middleware.cors import CORSMiddleware
 from app.db.session import SessionLocal
 from app.services.activity_service import delete_old_activity
+from app.routers.notifications import send_daily_digest_to_all
 
 
 async def _activity_cleanup_loop():
@@ -35,11 +37,34 @@ async def _activity_cleanup_loop():
         await asyncio.sleep(3600)  # 1 hour
 
 
+async def _daily_digest_loop():
+    """Send daily email digest at 9am every day."""
+    while True:
+        now = datetime.now()
+        next_run = now.replace(hour=9, minute=0, second=0, microsecond=0)
+        if now >= next_run:
+            next_run += timedelta(days=1)
+        wait_seconds = (next_run - now).total_seconds()
+        await asyncio.sleep(wait_seconds)
+        print("[daily digest] Firing now...")
+        try:
+            db = SessionLocal()
+            send_daily_digest_to_all(db)
+            print("[daily digest] Done — emails sent")
+        except Exception as e:
+            print(f"[daily digest] Error: {e}")
+        finally:
+            db.close()
+        await asyncio.sleep(86400)  # sleep 24h before recalculating
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     task = asyncio.create_task(_activity_cleanup_loop())
+    digest_task = asyncio.create_task(_daily_digest_loop())
     yield
     task.cancel()
+    digest_task.cancel()
 
 
 app = FastAPI(title="Show Tracker API", lifespan=lifespan)
@@ -63,5 +88,9 @@ app.include_router(
 )
 app.include_router(search.router, prefix="/search", tags=["search"])
 app.include_router(friends.router, prefix="/friends", tags=["friends"])
-app.include_router(currently_watching.router, prefix="/currently-watching", tags=["currently-watching"])
-app.include_router(notifications.router, prefix="/notifications", tags=["notifications"])
+app.include_router(
+    currently_watching.router, prefix="/currently-watching", tags=["currently-watching"]
+)
+app.include_router(
+    notifications.router, prefix="/notifications", tags=["notifications"]
+)

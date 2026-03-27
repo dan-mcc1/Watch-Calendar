@@ -6,7 +6,7 @@ class Settings(BaseSettings):
     DATABASE_URL: str
     FRONTEND_URL: str = "https://watch-calendar.vercel.app"
     FIREBASE_CREDS_PATH: str = "/etc/secrets/firebase-service.json"
-    SMTP_HOST: str = ""
+    SMTP_HOST: str = "smtp.gmail.com"
     SMTP_PORT: int = 587
     SMTP_USER: str = ""
     SMTP_PASSWORD: str = ""

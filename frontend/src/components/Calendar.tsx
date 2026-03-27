@@ -5,6 +5,7 @@ import WatchlistModal from "./WatchlistModal";
 import { User } from "firebase/auth";
 import DailyEpisodeList from "./DailyEpisodeList";
 import { BASE_IMAGE_URL } from "../constants";
+import { parseLocalDate } from "../utils/date";
 
 interface Day {
   date: Date;
@@ -259,7 +260,7 @@ export default function CalendarComponent({
   const upcomingThisMonth = allItems.filter((item) => {
     const dateStr = item.type === "tv" ? item.air_date : item.release_date;
     if (!dateStr) return false;
-    const d = new Date(dateStr);
+    const d = parseLocalDate(dateStr);
     return d >= today && d.getMonth() === currentMonth && d.getFullYear() === currentYear;
   }).length;
 

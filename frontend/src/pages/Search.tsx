@@ -87,7 +87,7 @@ export default function Search() {
         </div>
       )}
 
-      {!loading && <MediaList results={results} />}
+      {!loading && <MediaList results={results} showFullDate />}
     </div>
   );
 }

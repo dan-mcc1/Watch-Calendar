@@ -2,6 +2,7 @@ import { useParams } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { BASE_IMAGE_URL, API_URL } from "../constants";
 import type { Show, Episode } from "../types/calendar";
+import { parseLocalDate, formatLocalDate } from "../utils/date";
 import SeasonInfo from "../components/SeasonInfo";
 import WhereToWatch from "../components/WhereToWatch";
 import CastBar from "../components/CastBar";
@@ -110,7 +111,7 @@ export default function ShowInfo() {
   if (error) return <p className="text-red-400 p-6">{error}</p>;
   if (!show) return <p className="text-slate-400 p-6">Show not found.</p>;
 
-  const year = show.first_air_date ? new Date(show.first_air_date).getFullYear() : null;
+  const year = show.first_air_date ? parseLocalDate(show.first_air_date).getFullYear() : null;
   const trailer = show.videos?.results?.find(
     (v) => v.type === "Trailer" && v.site === "YouTube"
   ) ?? show.videos?.results?.find((v) => v.site === "YouTube");
@@ -219,13 +220,13 @@ export default function ShowInfo() {
           {show.first_air_date && (
             <div>
               <div className="text-slate-500 text-xs uppercase tracking-wide mb-0.5">First Aired</div>
-              <div className="text-slate-200">{new Date(show.first_air_date).toLocaleDateString("en-us", { year: "numeric", month: "long", day: "numeric" })}</div>
+              <div className="text-slate-200">{formatLocalDate(show.first_air_date, { year: "numeric", month: "long", day: "numeric" })}</div>
             </div>
           )}
           {show.last_air_date && (
             <div>
               <div className="text-slate-500 text-xs uppercase tracking-wide mb-0.5">Last Aired</div>
-              <div className="text-slate-200">{new Date(show.last_air_date).toLocaleDateString("en-us", { year: "numeric", month: "long", day: "numeric" })}</div>
+              <div className="text-slate-200">{formatLocalDate(show.last_air_date, { year: "numeric", month: "long", day: "numeric" })}</div>
             </div>
           )}
           {show.homepage && (

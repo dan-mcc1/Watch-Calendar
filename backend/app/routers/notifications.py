@@ -78,6 +78,60 @@ def _build_upcoming_items(db: Session, user_id: str) -> list:
     return upcoming
 
 
+def _build_todays_items(db: Session, user_id: str) -> list:
+    """Find watchlisted movies/shows releasing today."""
+    today = date.today()
+    upcoming = []
+
+    movie_ids = [
+        r.content_id
+        for r in db.query(Watchlist.content_id)
+        .filter_by(user_id=user_id, content_type="movie")
+        .all()
+    ]
+    for mid in movie_ids:
+        m = db.query(Movie).filter_by(id=mid).first()
+        if m and m.release_date:
+            try:
+                if date.fromisoformat(str(m.release_date)) == today:
+                    upcoming.append({"title": m.title, "date": str(today)})
+            except (ValueError, TypeError):
+                pass
+
+    show_ids = [
+        r.content_id
+        for r in db.query(Watchlist.content_id)
+        .filter_by(user_id=user_id, content_type="tv")
+        .all()
+    ]
+    for sid in show_ids:
+        s = db.query(Show).filter_by(id=sid).first()
+        if s and s.last_air_date:
+            try:
+                if date.fromisoformat(str(s.last_air_date)) == today:
+                    upcoming.append({"title": s.name, "date": str(today)})
+            except (ValueError, TypeError):
+                pass
+
+    return upcoming
+
+
+def send_daily_digest_to_all(db: Session):
+    """Send today's digest email to all users with notifications enabled."""
+    users = (
+        db.query(User)
+        .filter(User.email_notifications == True, User.email != None)
+        .all()
+    )
+    for user in users:
+        try:
+            items = _build_todays_items(db, user.id)
+            if items:
+                send_notification_email(user.email, user.username or "", items)
+        except Exception as e:
+            print(f"[daily digest] Failed for {user.email}: {e}")
+
+
 @router.post("/send-digest")
 def send_digest(
     background_tasks: BackgroundTasks,

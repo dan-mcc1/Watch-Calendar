@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { BASE_IMAGE_URL, API_URL } from "../constants";
 import type { Movie } from "../types/calendar";
+import { parseLocalDate, formatLocalDate } from "../utils/date";
 import { useParams } from "react-router-dom";
 import WhereToWatch from "../components/WhereToWatch";
 import CastBar from "../components/CastBar";
@@ -115,7 +116,7 @@ export default function MovieInfo() {
   if (error) return <p className="text-red-400 p-6">{error}</p>;
   if (!movie) return <p className="text-slate-400 p-6">Movie not found.</p>;
 
-  const year = movie.release_date ? new Date(movie.release_date).getFullYear() : null;
+  const year = movie.release_date ? parseLocalDate(movie.release_date).getFullYear() : null;
   const trailer = movie.videos?.results?.find(
     (v) => v.type === "Trailer" && v.site === "YouTube"
   ) ?? movie.videos?.results?.find((v) => v.site === "YouTube");
@@ -221,7 +222,7 @@ export default function MovieInfo() {
             <div>
               <div className="text-slate-500 text-xs uppercase tracking-wide mb-0.5">Release Date</div>
               <div className="text-slate-200">
-                {new Date(movie.release_date).toLocaleDateString("en-us", { year: "numeric", month: "long", day: "numeric" })}
+                {formatLocalDate(movie.release_date, { year: "numeric", month: "long", day: "numeric" })}
               </div>
             </div>
           )}

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { BASE_IMAGE_URL, API_URL } from "../constants";
 import type { Movie, Show } from "../types/calendar";
+import { formatLocalDate } from "../utils/date";
 
 type FullPersonData = {
   id: number;
@@ -168,7 +169,7 @@ export default function PersonInfo() {
               <div className="bg-slate-800 border border-slate-700 rounded-xl px-4 py-3">
                 <div className="text-slate-500 text-xs uppercase tracking-wide mb-0.5">Born</div>
                 <div className="text-slate-200">
-                  {new Date(person.birthday).toLocaleDateString("en-us", { year: "numeric", month: "long", day: "numeric" })}
+                  {formatLocalDate(person.birthday, { year: "numeric", month: "long", day: "numeric" })}
                 </div>
               </div>
             )}

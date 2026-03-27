@@ -105,7 +105,7 @@ export default function Upcoming() {
       )}
 
       {!loading && (
-        <MediaList results={{ movies: results.movies, shows: results.shows, people: [] }} />
+        <MediaList results={{ movies: results.movies, shows: results.shows, people: [] }} showFullDate />
       )}
     </div>
   );

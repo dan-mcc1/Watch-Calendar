@@ -1,6 +1,7 @@
 import { Movie, Show } from "../types/calendar";
 import { BASE_IMAGE_URL } from "../constants";
 import { Link } from "react-router-dom";
+import { parseLocalDate } from "../utils/date";
 
 type MediaCardProps =
   | {
@@ -17,7 +18,7 @@ type MediaCardProps =
 export default function MediaCard({ item, type, onRemove }: MediaCardProps) {
   const title = type === "tv" ? (item as Show).name : (item as Movie).title;
   const date = type === "tv" ? (item as Show).first_air_date : (item as Movie).release_date;
-  const year = date ? new Date(date).getFullYear() : null;
+  const year = date ? parseLocalDate(date).getFullYear() : null;
 
   const genres: { id: number; name: string }[] = item.genres ?? [];
 
