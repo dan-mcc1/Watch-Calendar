@@ -173,28 +173,15 @@ export default function Dashboard() {
 
   return (
     <div>
-      {!loading ? (
-        <>
-          <Calendar
-            calendarData={CalendarData}
-            setCalendarData={setCalendarData}
-            showWatchlist={showWatchlist}
-            setShowWatchlist={setShowWatchlist}
-            user={user}
-            watchedEpisodeKeys={watchedEpisodeKeys}
-          />
-          {/* {user && (
-            <WatchlistModal
-              isOpen={showWatchlist}
-              onClose={() => setShowWatchlist(false)}
-              allShowData={allShowData}
-              setAllShowData={setAllShowData}
-            />
-          )} */}
-        </>
-      ) : (
-        <p>Loading episodes...</p>
-      )}
+      <Calendar
+        calendarData={CalendarData}
+        setCalendarData={setCalendarData}
+        showWatchlist={showWatchlist}
+        setShowWatchlist={setShowWatchlist}
+        user={user}
+        watchedEpisodeKeys={watchedEpisodeKeys}
+        isLoading={loading}
+      />
     </div>
   );
 }

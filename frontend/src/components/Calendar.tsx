@@ -18,6 +18,7 @@ interface CalendarProps {
   setShowWatchlist: React.Dispatch<React.SetStateAction<boolean>>;
   user: User | null;
   watchedEpisodeKeys?: Set<string>;
+  isLoading?: boolean;
 }
 
 export type CalendarItem =
@@ -43,6 +44,7 @@ export default function CalendarComponent({
   setShowWatchlist,
   user,
   watchedEpisodeKeys = new Set(),
+  isLoading = false,
 }: CalendarProps) {
   const allItems: CalendarItem[] = [
     ...calendarData.shows.flatMap((show) =>
@@ -300,41 +302,47 @@ export default function CalendarComponent({
           {day.date.getDate()}
         </time>
 
-        {cellItems.map((item, idx) => {
-          const title =
-            "episode_number" in item
-              ? `${item.showData.name} - ${item.name}`
-              : item.title;
+        {isLoading ? (
+          Array.from({ length: day.date.getDate() % 3 === 0 ? 2 : 1 }).map((_, idx) => (
+            <div key={idx} className="mt-1 h-14 rounded-md bg-slate-700 animate-pulse" />
+          ))
+        ) : (
+          cellItems.map((item, idx) => {
+            const title =
+              "episode_number" in item
+                ? `${item.showData.name} - ${item.name}`
+                : item.title;
 
-          return (
-            <div
-              key={idx}
-              className="relative mt-1 h-14 rounded-md overflow-hidden group"
-            >
-              {item.showData.backdrop_path && (
-                <img
-                  src={`${BASE_IMAGE_URL}/w780${item.showData.backdrop_path}`}
-                  alt=""
-                  className="absolute inset-0 h-full w-full object-cover"
-                />
-              )}
-              <div className="absolute inset-0 bg-black/50" />
-              <div className="relative z-10 flex h-full items-center justify-center px-1">
-                {item.showData.logo_path ? (
+            return (
+              <div
+                key={idx}
+                className="relative mt-1 h-14 rounded-md overflow-hidden group"
+              >
+                {item.showData.backdrop_path && (
                   <img
-                    src={`${BASE_IMAGE_URL}/w300${item.showData.logo_path}`}
-                    alt={title}
-                    className="max-h-9 object-contain drop-shadow-md"
+                    src={`${BASE_IMAGE_URL}/w780${item.showData.backdrop_path}`}
+                    alt=""
+                    className="absolute inset-0 h-full w-full object-cover"
                   />
-                ) : (
-                  <span className="text-white text-[9px] font-semibold text-center line-clamp-2 drop-shadow">
-                    {title}
-                  </span>
                 )}
+                <div className="absolute inset-0 bg-black/50" />
+                <div className="relative z-10 flex h-full items-center justify-center px-1">
+                  {item.showData.logo_path ? (
+                    <img
+                      src={`${BASE_IMAGE_URL}/w300${item.showData.logo_path}`}
+                      alt={title}
+                      className="max-h-9 object-contain drop-shadow-md"
+                    />
+                  ) : (
+                    <span className="text-white text-[9px] font-semibold text-center line-clamp-2 drop-shadow">
+                      {title}
+                    </span>
+                  )}
+                </div>
               </div>
-            </div>
-          );
-        })}
+            );
+          })
+        )}
       </div>
     );
   };
