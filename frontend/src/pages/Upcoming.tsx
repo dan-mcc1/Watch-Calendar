@@ -30,7 +30,9 @@ export default function Upcoming() {
       try {
         const endpoint = searchType === "tv" ? "tv" : "movie";
         const params = new URLSearchParams({ min_date, max_date });
-        const res = await fetch(`${API_URL}/search/${endpoint}/upcoming?${params.toString()}`);
+        const res = await fetch(
+          `${API_URL}/search/${endpoint}/upcoming?${params.toString()}`,
+        );
         if (!res.ok) throw new Error("Failed to fetch upcoming");
         const data = await res.json();
         if (searchType === "tv") {
@@ -87,7 +89,8 @@ export default function Upcoming() {
       {/* Results count */}
       {!loading && total > 0 && (
         <p className="text-slate-500 text-sm mb-4">
-          {total} {searchType === "movie" ? "movies" : "shows"} releasing in the next 30 days
+          {total} {searchType === "movie" ? "movies" : "shows"} releasing in the
+          next 30 days
         </p>
       )}
 
@@ -95,17 +98,31 @@ export default function Upcoming() {
       {!loading && total === 0 && (
         <div className="flex flex-col items-center justify-center py-20 text-center">
           <div className="w-16 h-16 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center mb-4">
-            <svg className="w-8 h-8 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            <svg
+              className="w-8 h-8 text-slate-500"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={1.5}
+                d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
+              />
             </svg>
           </div>
           <h3 className="text-slate-300 font-medium mb-1">Nothing coming up</h3>
-          <p className="text-slate-500 text-sm">No releases found for the next 30 days</p>
+          <p className="text-slate-500 text-sm">
+            No releases found for the next 30 days
+          </p>
         </div>
       )}
 
       {!loading && (
-        <MediaList results={{ movies: results.movies, shows: results.shows, people: [] }} showFullDate />
+        <MediaList
+          results={{ movies: results.movies, shows: results.shows, people: [] }}
+        />
       )}
     </div>
   );
