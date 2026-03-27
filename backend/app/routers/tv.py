@@ -74,15 +74,68 @@ def get_full_show_info(id: int):
 
 
 @router.get("/{id}/season_calendar")
-def season_calendar(id: int, db: Session = Depends(get_db)):
+def season_calendar(
+    id: int,
+    min_date: str | None = Query(None, description="ISO date YYYY-MM-DD — start of window"),
+    max_date: str | None = Query(None, description="ISO date YYYY-MM-DD — end of window"),
+    db: Session = Depends(get_db),
+):
     """
-    Return recent episodes for a show (last 2 seasons).
-    Loads from the episode table when available, falls back to TMDB.
+    Return episodes for a show.
+    When min_date/max_date are supplied, returns only episodes within that date
+    window (used by the windowed calendar on the frontend).
+    Without date params, falls back to the original 'last 2 seasons' behaviour.
     """
+    def _serialize(ep: Episode) -> dict:
+        return {
+            "id": ep.id,
+            "show_id": ep.show_id,
+            "season_number": ep.season_number,
+            "episode_number": ep.episode_number,
+            "name": ep.name,
+            "air_date": str(ep.air_date) if ep.air_date else None,
+            "runtime": ep.runtime,
+            "still_path": ep.still_path,
+            "overview": ep.overview,
+            "vote_average": ep.vote_average,
+        }
+
+    # ── Windowed mode ────────────────────────────────────────────────────
+    if min_date and max_date:
+        show = db.query(Show).filter(Show.id == id).first()
+        if show:
+            db_episodes = (
+                db.query(Episode)
+                .filter(
+                    Episode.show_id == id,
+                    Episode.air_date >= min_date,
+                    Episode.air_date <= max_date,
+                )
+                .order_by(Episode.season_number, Episode.episode_number)
+                .all()
+            )
+            return [_serialize(ep) for ep in db_episodes]
+
+        # Show not in DB — fetch recent seasons from TMDB and filter by date
+        show_data = fetch_show_from_tmdb(id, append="seasons")
+        if not show_data:
+            raise HTTPException(status_code=404, detail="Show not found")
+        recent = sorted(
+            [s for s in show_data.get("seasons", []) if s.get("season_number", 0) > 0],
+            key=lambda s: s["season_number"],
+            reverse=True,
+        )[:2]
+        all_episodes = []
+        for season in recent:
+            for ep in fetch_season_data_from_tmdb(show_data["id"], season["season_number"]):
+                if ep.get("air_date") and min_date <= ep["air_date"] <= max_date:
+                    all_episodes.append(ep)
+        return all_episodes
+
+    # ── Original mode: last 2 seasons ────────────────────────────────────
     show = db.query(Show).options(selectinload(Show.seasons)).filter(Show.id == id).first()
 
     if show:
-        # Convert Season ORM objects to dicts for consistent access below
         seasons = [{"season_number": s.season_number} for s in show.seasons]
         show_id = show.id
     else:
@@ -108,21 +161,7 @@ def season_calendar(id: int, db: Session = Depends(get_db)):
             .all()
         )
         if db_episodes:
-            all_episodes.extend(
-                {
-                    "id": ep.id,
-                    "show_id": ep.show_id,
-                    "season_number": ep.season_number,
-                    "episode_number": ep.episode_number,
-                    "name": ep.name,
-                    "air_date": str(ep.air_date) if ep.air_date else None,
-                    "runtime": ep.runtime,
-                    "still_path": ep.still_path,
-                    "overview": ep.overview,
-                    "vote_average": ep.vote_average,
-                }
-                for ep in db_episodes
-            )
+            all_episodes.extend(_serialize(ep) for ep in db_episodes)
         else:
             all_episodes.extend(fetch_season_data_from_tmdb(show_id, sn))
 

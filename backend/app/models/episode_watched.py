@@ -8,7 +8,7 @@ class EpisodeWatched(Base):
     __tablename__ = "episode_watched"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    user_id = Column(String, ForeignKey("user.id"))
+    user_id = Column(String, ForeignKey("user.id"), index=True)
     show_id = Column(Integer, ForeignKey("show.id"))
     episode_id = Column(Integer, ForeignKey("episode.id"), nullable=True)
     season_number = Column(Integer)

@@ -1,9 +1,11 @@
-import { BASE_IMAGE_URL } from "../constants";
+import { BASE_IMAGE_URL, API_URL } from "../constants";
 import { Link } from "react-router-dom";
 import { Movie, Show, Person } from "../types/calendar";
 import { parseLocalDate } from "../utils/date";
-import { useState } from "react";
-import WatchButton from "./WatchButton";
+import { useState, useEffect } from "react";
+import { getAuth } from "firebase/auth";
+import { firebaseApp } from "../firebase";
+import WatchButton, { WatchStatus } from "./WatchButton";
 
 interface MediaListProps {
   results: {
@@ -42,9 +44,11 @@ function formatFullDate(dateStr: string | null | undefined): string | null {
   });
 }
 
+type StatusMap = Record<string, { status: WatchStatus; rating: number | null }>;
+
 // ── Media row card (movie / show) ──────────────────────────────────────────
 
-function MediaRow({ item, type, showWatchButton = true, showFullDate = false }: { item: Movie | Show; type: "movie" | "tv"; showWatchButton?: boolean; showFullDate?: boolean }) {
+function MediaRow({ item, type, showWatchButton = true, showFullDate = false, statusMap }: { item: Movie | Show; type: "movie" | "tv"; showWatchButton?: boolean; showFullDate?: boolean; statusMap?: StatusMap }) {
   const title = "title" in item ? item.title : item.name;
   const year = getYear(item);
   const genres: { id: number; name: string }[] = item.genres ?? [];
@@ -111,7 +115,16 @@ function MediaRow({ item, type, showWatchButton = true, showFullDate = false }: 
           </div>
           {showWatchButton && (
             <div className="flex-shrink-0 hidden sm:block">
-              <WatchButton contentType={type} contentId={item.id} />
+              {statusMap === undefined ? (
+                <div className="h-9 w-36 rounded-xl bg-slate-700 animate-pulse" />
+              ) : (
+                <WatchButton
+                  contentType={type}
+                  contentId={item.id}
+                  initialStatus={statusMap[`${type}:${item.id}`]?.status}
+                  initialRating={statusMap[`${type}:${item.id}`]?.rating}
+                />
+              )}
             </div>
           )}
         </div>
@@ -125,7 +138,16 @@ function MediaRow({ item, type, showWatchButton = true, showFullDate = false }: 
         {/* WatchButton on mobile (below overview) */}
         {showWatchButton && (
           <div className="sm:hidden mt-1">
-            <WatchButton contentType={type} contentId={item.id} />
+            {statusMap === undefined ? (
+              <div className="h-9 w-36 rounded-xl bg-slate-700 animate-pulse" />
+            ) : (
+              <WatchButton
+                contentType={type}
+                contentId={item.id}
+                initialStatus={statusMap[`${type}:${item.id}`]?.status}
+                initialRating={statusMap[`${type}:${item.id}`]?.rating}
+              />
+            )}
           </div>
         )}
       </div>
@@ -224,10 +246,46 @@ function Section({
 
 export default function MediaList({ results, showWatchButton = true, showFullDate = false }: MediaListProps) {
   const [visibleCounts, setVisibleCounts] = useState<Record<string, number>>({});
+  // undefined = not yet fetched, {} = fetched (user logged out or no items)
+  const [statusMap, setStatusMap] = useState<StatusMap | undefined>(undefined);
 
   const movies = results.movies ?? [];
   const shows = results.shows ?? [];
   const people = results.people ?? [];
+
+  // Fetch all statuses in one request instead of one per WatchButton.
+  // Wait for auth state before fetching so currentUser is available.
+  useEffect(() => {
+    if (!showWatchButton) {
+      setStatusMap({});
+      return;
+    }
+
+    const items = [
+      ...movies.map((m) => ({ content_type: "movie", content_id: m.id })),
+      ...shows.map((s) => ({ content_type: "tv", content_id: s.id })),
+    ];
+
+    const auth = getAuth(firebaseApp);
+    // onAuthStateChanged fires immediately with the cached user (or null)
+    const unsubscribe = auth.onAuthStateChanged((user) => {
+      if (!user || !items.length) {
+        setStatusMap({});
+        return;
+      }
+      user.getIdToken().then((token) =>
+        fetch(`${API_URL}/watchlist/status/bulk`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+          body: JSON.stringify(items),
+        })
+          .then((r) => r.ok ? r.json() : {})
+          .then(setStatusMap)
+          .catch(() => setStatusMap({}))
+      );
+    });
+    return unsubscribe;
+  }, [movies, shows, showWatchButton]);
 
   if (movies.length === 0 && shows.length === 0 && people.length === 0) return null;
 
@@ -258,7 +316,7 @@ export default function MediaList({ results, showWatchButton = true, showFullDat
             onToggle={() => toggle(section.key, section.items.length)}
           >
             {section.items.slice(0, visible).map((item) => (
-              <MediaRow key={item.id} item={item as Movie | Show} type={section.type} showWatchButton={showWatchButton} showFullDate={showFullDate} />
+              <MediaRow key={item.id} item={item as Movie | Show} type={section.type} showWatchButton={showWatchButton} showFullDate={showFullDate} statusMap={statusMap} />
             ))}
           </Section>
         );

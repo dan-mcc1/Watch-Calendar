@@ -16,7 +16,8 @@ from app.services.tmdb_movies import fetch_movie_from_tmdb
 from app.services.tmdb_tv import fetch_show_from_tmdb
 from app.services.episode_service import maybe_sync_show_episodes
 from app.services.activity_service import log_activity
-from functools import lru_cache
+from sqlalchemy import text
+from collections import defaultdict
 
 
 # -------------------------
@@ -359,15 +360,13 @@ def add_to_watchlist(db: Session, user_id: str, content_type: str, content_id: i
             _upsert_providers_for_show(db, show, us_providers)
             _upsert_seasons_for_show(db, show, show_data.get("seasons", []))
 
-    # Log activity before committing
+    # Log activity before committing — reuse already-fetched objects
     if content_type == "movie":
-        item = db.query(Movie).filter_by(id=content_id).first()
         log_activity(db, user_id, "want_to_watch", content_type, content_id,
-                     item.title if item else None, item.poster_path if item else None)
+                     movie.title if movie else None, movie.poster_path if movie else None)
     elif content_type == "tv":
-        item = db.query(Show).filter_by(id=content_id).first()
         log_activity(db, user_id, "want_to_watch", content_type, content_id,
-                     item.name if item else None, item.poster_path if item else None)
+                     show.name if show else None, show.poster_path if show else None)
 
     db.commit()
     db.refresh(entry)
@@ -443,14 +442,12 @@ def _movie_query_options():
     ]
 
 
-@lru_cache(maxsize=1024)
 def get_watchlist(db: Session, user_id: str):
     movies = get_movie_watchlist_info(db, user_id)
     shows = get_tv_watchlist_info(db, user_id)
     return {"movies": movies, "shows": shows}
 
 
-@lru_cache(maxsize=1024)
 def get_tv_watchlist_info(db: Session, user_id: str):
     items = (
         db.query(Show)
@@ -469,7 +466,6 @@ def get_tv_watchlist_info(db: Session, user_id: str):
     return [serialize_show(show) for show in items]
 
 
-@lru_cache(maxsize=1024)
 def get_movie_watchlist_info(db: Session, user_id: str):
     items = (
         db.query(Movie)
@@ -488,59 +484,107 @@ def get_movie_watchlist_info(db: Session, user_id: str):
     return [serialize_movie(movie) for movie in items]
 
 
-@lru_cache(maxsize=1024)
 def get_movie_watchlist_status(id: int, db: Session, user_id: str):
-    entry = (
-        db.query(CurrentlyWatching)
-        .filter_by(content_id=id, user_id=user_id, content_type="movie")
-        .first()
-    )
-    if entry:
-        return {"status": "Currently Watching"}
+    row = db.execute(text("""
+        SELECT 'Currently Watching' AS status, NULL::float AS rating
+        FROM currently_watching
+        WHERE user_id = :uid AND content_id = :cid AND content_type = 'movie'
+        UNION ALL
+        SELECT 'Want To Watch', NULL
+        FROM watchlist
+        WHERE user_id = :uid AND content_id = :cid AND content_type = 'movie'
+        UNION ALL
+        SELECT 'Watched', rating
+        FROM watched
+        WHERE user_id = :uid AND content_id = :cid AND content_type = 'movie'
+        LIMIT 1
+    """), {"uid": user_id, "cid": id}).first()
 
-    entry = (
-        db.query(Watchlist)
-        .filter_by(content_id=id, user_id=user_id, content_type="movie")
-        .first()
-    )
-    if entry:
-        return {"status": "Want To Watch"}
-
-    entry = (
-        db.query(Watched)
-        .filter_by(content_id=id, user_id=user_id, content_type="movie")
-        .first()
-    )
-    if entry:
-        return {"status": "Watched", "rating": entry.rating}
-
-    return {"status": "none"}
+    if not row:
+        return {"status": "none"}
+    if row.status == "Watched":
+        return {"status": "Watched", "rating": row.rating}
+    return {"status": row.status}
 
 
-@lru_cache(maxsize=1024)
 def get_show_watchlist_status(id: int, db: Session, user_id: str):
-    entry = (
-        db.query(CurrentlyWatching)
-        .filter_by(content_id=id, user_id=user_id, content_type="tv")
-        .first()
-    )
-    if entry:
-        return {"status": "Currently Watching"}
+    row = db.execute(text("""
+        SELECT 'Currently Watching' AS status, NULL::float AS rating
+        FROM currently_watching
+        WHERE user_id = :uid AND content_id = :cid AND content_type = 'tv'
+        UNION ALL
+        SELECT 'Want To Watch', NULL
+        FROM watchlist
+        WHERE user_id = :uid AND content_id = :cid AND content_type = 'tv'
+        UNION ALL
+        SELECT 'Watched', rating
+        FROM watched
+        WHERE user_id = :uid AND content_id = :cid AND content_type = 'tv'
+        LIMIT 1
+    """), {"uid": user_id, "cid": id}).first()
 
-    entry = (
-        db.query(Watchlist)
-        .filter_by(content_id=id, user_id=user_id, content_type="tv")
-        .first()
-    )
-    if entry:
-        return {"status": "Want To Watch"}
+    if not row:
+        return {"status": "none"}
+    if row.status == "Watched":
+        return {"status": "Watched", "rating": row.rating}
+    return {"status": row.status}
 
-    entry = (
-        db.query(Watched)
-        .filter_by(content_id=id, user_id=user_id, content_type="tv")
-        .first()
-    )
-    if entry:
-        return {"status": "Watched", "rating": entry.rating}
 
-    return {"status": "none"}
+def get_tv_calendar(db: Session, user_id: str):
+    """
+    Return all TV shows in the user's watchlist + currently-watching list
+    with all their episodes. 3 DB queries regardless of how many shows.
+    """
+    # 1. Collect show IDs from both tables
+    watchlist_ids = {
+        row.content_id
+        for row in db.query(Watchlist.content_id)
+        .filter(Watchlist.user_id == user_id, Watchlist.content_type == "tv")
+        .all()
+    }
+    cw_ids = {
+        row.content_id
+        for row in db.query(CurrentlyWatching.content_id)
+        .filter(CurrentlyWatching.user_id == user_id, CurrentlyWatching.content_type == "tv")
+        .all()
+    }
+    show_ids = list(watchlist_ids | cw_ids)
+
+    if not show_ids:
+        return []
+
+    # 2. Load show metadata + relationships
+    shows = (
+        db.query(Show)
+        .options(*_show_query_options())
+        .filter(Show.id.in_(show_ids))
+        .all()
+    )
+
+    # 3. Load all episodes for every show in one query
+    episodes = (
+        db.query(Episode)
+        .filter(Episode.show_id.in_(show_ids))
+        .order_by(Episode.show_id, Episode.season_number, Episode.episode_number)
+        .all()
+    )
+
+    eps_by_show: dict[int, list] = defaultdict(list)
+    for ep in episodes:
+        eps_by_show[ep.show_id].append({
+            "id": ep.id,
+            "show_id": ep.show_id,
+            "season_number": ep.season_number,
+            "episode_number": ep.episode_number,
+            "name": ep.name,
+            "air_date": str(ep.air_date) if ep.air_date else None,
+            "runtime": ep.runtime,
+            "still_path": ep.still_path,
+            "overview": ep.overview,
+            "vote_average": ep.vote_average,
+        })
+
+    return [
+        {"show": serialize_show(show), "episodes": eps_by_show[show.id]}
+        for show in shows
+    ]
