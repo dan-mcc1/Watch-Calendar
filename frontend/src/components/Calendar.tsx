@@ -70,7 +70,9 @@ export default function CalendarComponent({
 
   const [filterType, setFilterType] = useState<"all" | "tv" | "movie">("all");
   const [watchFilter, setWatchFilter] = useState<"all" | "watched" | "unwatched">("all");
-  const [viewMode, setViewMode] = useState<ViewMode>("month");
+  const [viewMode, setViewMode] = useState<ViewMode>(() =>
+    typeof window !== "undefined" && window.innerWidth < 640 ? "day" : "month"
+  );
   const [showFilters, setShowFilters] = useState(false);
   const filterRef = useRef<HTMLDivElement>(null);
 
@@ -282,8 +284,8 @@ export default function CalendarComponent({
     return (
       <div
         onClick={() => setItemsForDay(day.date)}
-        className={`relative px-2 py-2 overflow-y-auto border border-slate-700/50 cursor-pointer transition-colors duration-150 ${
-          isCompact ? "min-h-32" : "min-h-48"
+        className={`relative px-1 sm:px-2 py-1 sm:py-2 overflow-y-auto border border-slate-700/50 cursor-pointer transition-colors duration-150 ${
+          isCompact ? "min-h-20 sm:min-h-32" : "min-h-32 sm:min-h-48"
         } ${
           isToday
             ? "bg-blue-700 font-bold"
@@ -295,7 +297,7 @@ export default function CalendarComponent({
       >
         <time
           dateTime={isoDate}
-          className={`text-sm font-semibold ${
+          className={`text-xs sm:text-sm font-semibold ${
             isToday ? "text-white" : isSelected ? "text-blue-300" : "text-slate-300"
           }`}
         >
@@ -304,7 +306,7 @@ export default function CalendarComponent({
 
         {isLoading ? (
           Array.from({ length: day.date.getDate() % 3 === 0 ? 2 : 1 }).map((_, idx) => (
-            <div key={idx} className="mt-1 h-14 rounded-md bg-slate-700 animate-pulse" />
+            <div key={idx} className="mt-1 h-8 sm:h-14 rounded-md bg-slate-700 animate-pulse" />
           ))
         ) : (
           cellItems.map((item, idx) => {
@@ -316,7 +318,7 @@ export default function CalendarComponent({
             return (
               <div
                 key={idx}
-                className="relative mt-1 h-14 rounded-md overflow-hidden group"
+                className="relative mt-1 h-8 sm:h-14 rounded-md overflow-hidden group"
               >
                 {item.showData.backdrop_path && (
                   <img
@@ -331,10 +333,10 @@ export default function CalendarComponent({
                     <img
                       src={`${BASE_IMAGE_URL}/w300${item.showData.logo_path}`}
                       alt={title}
-                      className="max-h-9 object-contain drop-shadow-md"
+                      className="max-h-5 sm:max-h-9 object-contain drop-shadow-md"
                     />
                   ) : (
-                    <span className="text-white text-[9px] font-semibold text-center line-clamp-2 drop-shadow">
+                    <span className="text-white text-[7px] sm:text-[9px] font-semibold text-center line-clamp-2 drop-shadow">
                       {title}
                     </span>
                   )}
@@ -350,9 +352,9 @@ export default function CalendarComponent({
   return (
     <div className="lg:flex lg:h-full lg:flex-col max-w-7xl mx-auto">
       {/* Header */}
-      <header className="flex items-center justify-between border-b border-slate-700 px-6 py-4 bg-slate-900">
+      <header className="flex items-center justify-between border-b border-slate-700 px-4 sm:px-6 py-3 sm:py-4 bg-slate-900">
         <div className="flex items-center gap-3">
-          <span className="text-2xl font-bold text-white">Watch Calendar</span>
+          <span className="text-lg sm:text-2xl font-bold text-white">Watch Calendar</span>
           {viewMode === "month" && upcomingThisMonth > 0 && (
             <span className="hidden sm:inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-600/20 text-blue-400 border border-blue-600/30">
               {upcomingThisMonth} upcoming
@@ -368,101 +370,9 @@ export default function CalendarComponent({
       </header>
 
       {/* Controls bar */}
-      <div className="relative flex items-center gap-2 px-4 py-2.5 border-b border-slate-700 bg-slate-900">
-        {/* LEFT: view toggle + filter dropdown */}
-        <div className="flex items-center gap-2">
-          {/* View mode */}
-          <div className="inline-flex rounded-lg border border-slate-600 overflow-hidden">
-            {(["day", "week", "month"] as ViewMode[]).map((mode, idx, arr) => (
-              <button
-                key={mode}
-                onClick={() => setViewMode(mode)}
-                className={`px-3 py-1.5 text-sm font-medium capitalize transition-colors
-                  ${viewMode === mode ? "bg-blue-600 text-white" : "bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white"}
-                  ${idx < arr.length - 1 ? "border-r border-slate-600" : ""}
-                `}
-              >
-                {mode.charAt(0).toUpperCase() + mode.slice(1)}
-              </button>
-            ))}
-          </div>
-
-          {/* Filter dropdown */}
-          <div className="relative" ref={filterRef}>
-            <button
-              onClick={() => setShowFilters((v) => !v)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg border transition-colors
-                ${showFilters ? "bg-slate-700 border-slate-500 text-white" : "bg-slate-800 border-slate-600 text-slate-300 hover:bg-slate-700 hover:text-white"}
-              `}
-            >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M3 4h18M7 8h10M11 12h2" />
-              </svg>
-              Filter
-              {(filterType !== "all" || watchFilter !== "all") && (
-                <span className="w-2 h-2 rounded-full bg-blue-400" />
-              )}
-            </button>
-
-            {showFilters && (
-              <div className="absolute left-0 top-full mt-1.5 z-20 w-56 rounded-xl border border-slate-600 bg-slate-800 shadow-xl p-3 flex flex-col gap-3">
-                <div>
-                  <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Type</p>
-                  <div className="inline-flex rounded-lg border border-slate-600 overflow-hidden w-full">
-                    {(["all", "movie", "tv"] as const).map((value, idx, arr) => {
-                      const label = value === "all" ? "All" : value === "movie" ? "Movies" : "TV";
-                      return (
-                        <button
-                          key={value}
-                          onClick={() => { setFilterType(value); setItemsForDay(selectedDate.date); }}
-                          className={`flex-1 py-1.5 text-sm font-medium transition-colors
-                            ${filterType === value ? "bg-blue-600 text-white" : "bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white"}
-                            ${idx < arr.length - 1 ? "border-r border-slate-600" : ""}
-                          `}
-                        >
-                          {label}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                <div>
-                  <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Status</p>
-                  <div className="inline-flex rounded-lg border border-slate-600 overflow-hidden w-full">
-                    {(["all", "unwatched", "watched"] as const).map((value, idx, arr) => {
-                      const label = value === "all" ? "All" : value === "watched" ? "Watched" : "Unwatched";
-                      return (
-                        <button
-                          key={value}
-                          onClick={() => { setWatchFilter(value); setItemsForDay(selectedDate.date); }}
-                          className={`flex-1 py-1.5 text-sm font-medium transition-colors
-                            ${watchFilter === value ? "bg-emerald-600 text-white" : "bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white"}
-                            ${idx < arr.length - 1 ? "border-r border-slate-600" : ""}
-                          `}
-                        >
-                          {label}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {(filterType !== "all" || watchFilter !== "all") && (
-                  <button
-                    onClick={() => { setFilterType("all"); setWatchFilter("all"); setItemsForDay(selectedDate.date); }}
-                    className="text-xs text-slate-400 hover:text-white transition-colors text-left"
-                  >
-                    Clear filters
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* CENTER: Period navigation */}
-        <div className="absolute left-1/2 -translate-x-1/2 flex items-center gap-1">
+      <div className="border-b border-slate-700 bg-slate-900">
+        {/* Mobile-only: period navigation row */}
+        <div className="flex sm:hidden items-center justify-between px-4 pt-2 pb-1">
           <button
             onClick={handlePrev}
             className="h-8 w-8 flex items-center justify-center text-slate-400 hover:text-white hover:bg-slate-700 rounded-lg transition-colors"
@@ -471,7 +381,7 @@ export default function CalendarComponent({
               <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
             </svg>
           </button>
-          <div className="px-3 text-base font-semibold text-slate-100 whitespace-nowrap min-w-[180px] text-center">
+          <div className="text-sm font-semibold text-slate-100 text-center">
             {getCenterLabel()}
           </div>
           <button
@@ -484,24 +394,144 @@ export default function CalendarComponent({
           </button>
         </div>
 
-        {/* RIGHT: Watchlist */}
-        <div className="ml-auto">
-          {user && (
-            <>
+        {/* Main controls row */}
+        <div className="relative flex items-center gap-2 px-4 py-2.5">
+          {/* LEFT: view toggle + filter dropdown */}
+          <div className="flex items-center gap-2">
+            {/* View mode */}
+            <div className="inline-flex rounded-lg border border-slate-600 overflow-hidden">
+              {(["day", "week", "month"] as ViewMode[]).map((mode, idx, arr) => (
+                <button
+                  key={mode}
+                  onClick={() => setViewMode(mode)}
+                  className={`py-1.5 text-xs sm:text-sm font-medium capitalize transition-colors px-2 sm:px-3
+                    ${viewMode === mode ? "bg-blue-600 text-white" : "bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white"}
+                    ${idx < arr.length - 1 ? "border-r border-slate-600" : ""}
+                  `}
+                >
+                  <span className="sm:hidden">{mode === "month" ? "Mo" : mode === "week" ? "Wk" : "Day"}</span>
+                  <span className="hidden sm:inline">{mode.charAt(0).toUpperCase() + mode.slice(1)}</span>
+                </button>
+              ))}
+            </div>
+
+            {/* Filter dropdown */}
+            <div className="relative" ref={filterRef}>
               <button
-                onClick={() => setShowWatchlist(true)}
-                className="rounded-lg bg-slate-700 border border-slate-600 px-3 py-1.5 text-sm font-medium text-slate-200 hover:bg-slate-600 hover:text-white transition-colors"
+                onClick={() => setShowFilters((v) => !v)}
+                className={`flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1.5 text-xs sm:text-sm font-medium rounded-lg border transition-colors
+                  ${showFilters ? "bg-slate-700 border-slate-500 text-white" : "bg-slate-800 border-slate-600 text-slate-300 hover:bg-slate-700 hover:text-white"}
+                `}
               >
-                Watchlist
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 4h18M7 8h10M11 12h2" />
+                </svg>
+                <span className="hidden sm:inline">Filter</span>
+                {(filterType !== "all" || watchFilter !== "all") && (
+                  <span className="w-2 h-2 rounded-full bg-blue-400" />
+                )}
               </button>
-              <WatchlistModal
-                isOpen={showWatchlist}
-                onClose={() => setShowWatchlist(false)}
-                setCalendarData={setCalendarData}
-                calendarData={calendarData}
-              />
-            </>
-          )}
+
+              {showFilters && (
+                <div className="absolute left-0 top-full mt-1.5 z-20 w-56 rounded-xl border border-slate-600 bg-slate-800 shadow-xl p-3 flex flex-col gap-3">
+                  <div>
+                    <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Type</p>
+                    <div className="inline-flex rounded-lg border border-slate-600 overflow-hidden w-full">
+                      {(["all", "movie", "tv"] as const).map((value, idx, arr) => {
+                        const label = value === "all" ? "All" : value === "movie" ? "Movies" : "TV";
+                        return (
+                          <button
+                            key={value}
+                            onClick={() => { setFilterType(value); setItemsForDay(selectedDate.date); }}
+                            className={`flex-1 py-1.5 text-sm font-medium transition-colors
+                              ${filterType === value ? "bg-blue-600 text-white" : "bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white"}
+                              ${idx < arr.length - 1 ? "border-r border-slate-600" : ""}
+                            `}
+                          >
+                            {label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div>
+                    <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Status</p>
+                    <div className="inline-flex rounded-lg border border-slate-600 overflow-hidden w-full">
+                      {(["all", "unwatched", "watched"] as const).map((value, idx, arr) => {
+                        const label = value === "all" ? "All" : value === "watched" ? "Watched" : "Unwatched";
+                        return (
+                          <button
+                            key={value}
+                            onClick={() => { setWatchFilter(value); setItemsForDay(selectedDate.date); }}
+                            className={`flex-1 py-1.5 text-sm font-medium transition-colors
+                              ${watchFilter === value ? "bg-emerald-600 text-white" : "bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white"}
+                              ${idx < arr.length - 1 ? "border-r border-slate-600" : ""}
+                            `}
+                          >
+                            {label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {(filterType !== "all" || watchFilter !== "all") && (
+                    <button
+                      onClick={() => { setFilterType("all"); setWatchFilter("all"); setItemsForDay(selectedDate.date); }}
+                      className="text-xs text-slate-400 hover:text-white transition-colors text-left"
+                    >
+                      Clear filters
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* CENTER: Period navigation (desktop only) */}
+          <div className="hidden sm:flex absolute left-1/2 -translate-x-1/2 items-center gap-1">
+            <button
+              onClick={handlePrev}
+              className="h-8 w-8 flex items-center justify-center text-slate-400 hover:text-white hover:bg-slate-700 rounded-lg transition-colors"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+              </svg>
+            </button>
+            <div className="px-3 text-base font-semibold text-slate-100 whitespace-nowrap min-w-[180px] text-center">
+              {getCenterLabel()}
+            </div>
+            <button
+              onClick={handleNext}
+              className="h-8 w-8 flex items-center justify-center text-slate-400 hover:text-white hover:bg-slate-700 rounded-lg transition-colors"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+              </svg>
+            </button>
+          </div>
+
+          {/* RIGHT: Watchlist */}
+          <div className="ml-auto">
+            {user && (
+              <>
+                <button
+                  onClick={() => setShowWatchlist(true)}
+                  className="rounded-lg bg-slate-700 border border-slate-600 px-2 sm:px-3 py-1.5 text-xs sm:text-sm font-medium text-slate-200 hover:bg-slate-600 hover:text-white transition-colors"
+                >
+                  <span className="sm:hidden">List</span>
+                  <span className="hidden sm:inline">Watchlist</span>
+                </button>
+                <WatchlistModal
+                  isOpen={showWatchlist}
+                  onClose={() => setShowWatchlist(false)}
+                  setCalendarData={setCalendarData}
+                  calendarData={calendarData}
+                />
+              </>
+            )}
+          </div>
         </div>
       </div>
 
@@ -522,7 +552,7 @@ export default function CalendarComponent({
               {emptyCells.map((_, idx) => (
                 <div
                   key={`empty-${idx}`}
-                  className="bg-slate-950 min-h-[8rem] max-h-[14rem]"
+                  className="bg-slate-950 min-h-[5rem] sm:min-h-[8rem] max-h-[14rem]"
                 />
               ))}
               {daysOfMonth.map((day) => (
@@ -569,7 +599,7 @@ export default function CalendarComponent({
 
       {/* ── SELECTED DAY DETAIL (month & week views) ── */}
       {viewMode !== "day" && (
-        <div className="border-t border-slate-700 bg-slate-900/50 px-6 py-6">
+        <div className="border-t border-slate-700 bg-slate-900/50 px-4 sm:px-6 py-4 sm:py-6">
           <div className="flex items-center gap-3 mb-4">
             <h2 className="text-lg font-semibold text-slate-100">
               {selectedDate.date.toLocaleDateString(undefined, {
@@ -597,7 +627,7 @@ export default function CalendarComponent({
 
       {/* ── DAY VIEW ── */}
       {viewMode === "day" && (
-        <div className="px-6 py-6">
+        <div className="px-4 sm:px-6 py-4 sm:py-6">
           <div className="flex items-center gap-3 mb-4">
             <h2 className="text-xl font-semibold text-slate-100">
               {selectedDate.date.toLocaleDateString(undefined, {

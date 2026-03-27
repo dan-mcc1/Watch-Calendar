@@ -170,25 +170,25 @@ export default function ProfilePage() {
   return (
     <div className="max-w-6xl mx-auto px-4 py-8 space-y-8">
       {/* User Info */}
-      <div className="flex items-center gap-6 bg-[#2d4e63] p-6 rounded-lg text-white">
+      <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4 sm:gap-6 bg-[#2d4e63] p-5 sm:p-6 rounded-lg text-white text-center sm:text-left">
         <img
           src={user.photoURL ?? "/src/assets/avatar-placeholder.png"}
           alt={user.displayName ?? "User Avatar"}
-          className="w-24 h-24 rounded-full object-cover border-2 border-white/20"
+          className="w-20 h-20 sm:w-24 sm:h-24 rounded-full object-cover border-2 border-white/20 flex-shrink-0"
         />
         <div className="flex-1">
           <h1 className="text-2xl font-bold">{user.displayName ?? "User"}</h1>
 
           {/* Username row */}
           {editingUsername ? (
-            <div className="mt-2 flex flex-col gap-1 max-w-xs">
-              <div className="flex gap-2 items-center">
+            <div className="mt-2 flex flex-col gap-1 w-full max-w-xs mx-auto sm:mx-0">
+              <div className="flex flex-wrap gap-2 items-center justify-center sm:justify-start">
                 <input
                   type="text"
                   value={newUsername}
                   onChange={handleUsernameInput}
                   placeholder="new_username"
-                  className="bg-slate-700 text-slate-100 px-2 py-1 rounded text-sm w-40 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="bg-slate-700 text-slate-100 px-2 py-1 rounded text-sm w-36 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
                 <button
                   onClick={saveUsername}

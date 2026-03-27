@@ -82,9 +82,9 @@ export default function WatchlistModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-      <div className="bg-slate-900 border border-slate-700 w-11/12 md:w-2/3 lg:w-1/2 max-h-[80vh] flex flex-col rounded-xl shadow-2xl">
+      <div className="bg-slate-900 border border-slate-700 w-11/12 md:w-2/3 lg:w-1/2 max-h-[85vh] flex flex-col rounded-xl shadow-2xl">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-700 flex-shrink-0">
+        <div className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b border-slate-700 flex-shrink-0">
           <h2 className="text-xl font-bold text-white">My Watchlist</h2>
           <div className="flex items-center gap-3">
             <button
@@ -103,7 +103,7 @@ export default function WatchlistModal({
         </div>
 
         {/* Filter tabs */}
-        <div className="px-6 pt-4 pb-3 flex-shrink-0">
+        <div className="px-4 sm:px-6 pt-3 pb-2 sm:pt-4 sm:pb-3 flex-shrink-0">
           <div className="inline-flex rounded-lg border border-slate-600 overflow-hidden">
             {(["all", "tv", "movies"] as const).map((value, idx, arr) => {
               const label =
@@ -129,7 +129,7 @@ export default function WatchlistModal({
         </div>
 
         {/* Scrollable content */}
-        <div className="overflow-y-auto flex-1 px-6 pb-6">
+        <div className="overflow-y-auto flex-1 px-4 sm:px-6 pb-4 sm:pb-6">
           {showsToDisplay.length === 0 && moviesToDisplay.length === 0 ? (
             <p className="text-slate-500 italic py-4">
               Your watchlist is empty.
