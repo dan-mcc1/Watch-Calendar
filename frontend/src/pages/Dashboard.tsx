@@ -13,6 +13,7 @@ import { getAuth, onAuthStateChanged, User } from "firebase/auth";
 import { firebaseApp } from "../firebase";
 import CurrentlyWatchingStrip from "../components/CurrentlyWatchingStrip";
 import { Link } from "react-router-dom";
+import { getDashboardCache, setDashboardCache } from "../utils/dashboardCache";
 
 export default function Dashboard() {
   const [user, setUser] = useState<User | null>(null);
@@ -107,6 +108,16 @@ export default function Dashboard() {
       return;
     }
 
+    // Use cached data if available for this user
+    const cached = getDashboardCache(user.uid);
+    if (cached) {
+      setCalendarData(cached.calendarData);
+      setWatchedEpisodeKeys(cached.watchedEpisodeKeys);
+      setCurrentlyWatchingShows(cached.currentlyWatchingShows);
+      setCurrentlyWatchingMovies(cached.currentlyWatchingMovies);
+      return;
+    }
+
     async function fetchAllCalendarData() {
       setLoading(true);
       try {
@@ -129,10 +140,20 @@ export default function Dashboard() {
           if (!movieMap.has(m.id)) movieMap.set(m.id, { ...m, isWatched: false });
         }
 
-        setWatchedEpisodeKeys(episodeKeys);
-        setCalendarData({
+        const calendarData: CalendarData = {
           shows: tvShows,
           movies: Array.from(movieMap.values()),
+        };
+
+        setWatchedEpisodeKeys(episodeKeys);
+        setCalendarData(calendarData);
+
+        setDashboardCache({
+          calendarData,
+          watchedEpisodeKeys: episodeKeys,
+          currentlyWatchingShows: currentlyWatching.shows,
+          currentlyWatchingMovies: currentlyWatching.movies,
+          uid: user!.uid,
         });
       } catch (err) {
         console.error(err);

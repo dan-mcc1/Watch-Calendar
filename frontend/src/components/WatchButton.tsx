@@ -3,6 +3,7 @@ import { getAuth, User } from "firebase/auth";
 import { firebaseApp } from "../firebase";
 import { API_URL } from "../constants";
 import StarRating from "./StarRating";
+import { clearDashboardCache } from "../utils/dashboardCache";
 
 export type WatchStatus =
   | "none"
@@ -230,6 +231,7 @@ export default function WatchButton({
       setWatchStatus(targetStatus);
       if (targetStatus !== "Watched") setRating(null);
       setMenuOpen(false);
+      clearDashboardCache();
     } catch (err) {
       console.error(err);
       alert("Failed to update status");
@@ -256,6 +258,7 @@ export default function WatchButton({
         }),
       });
       setRating(newRating);
+      clearDashboardCache();
     } catch (err) {
       console.error(err);
     } finally {
