@@ -12,6 +12,7 @@ from app.services.user_service import (
 )
 from app.services.friends_service import are_friends
 from app.services.user_service import get_profile_watchlist, get_profile_watched
+from app.services.favorite_service import get_favorites
 from app.services.stats_service import get_user_stats
 from app.dependencies.auth import get_current_user
 from app.models.user import User
@@ -21,6 +22,7 @@ from app.models.episode_watched import EpisodeWatched
 from app.models.currently_watching import CurrentlyWatching
 from app.models.activity import Activity
 from app.models.friendship import Friendship
+from app.models.favorite import Favorite
 from app.models.show import Show
 from app.models.movie import Movie
 from app.models.episode import Episode
@@ -125,6 +127,9 @@ def get_public_profile(
 
     profile = {"id": target.id, "username": target.username, "is_friend": is_friend}
 
+    # Favorites are always public
+    profile["favorites"] = get_favorites(db, target.id)
+
     if is_friend:
         profile["watchlist"] = get_profile_watchlist(db, target.id)
         profile["watched"] = get_profile_watched(db, target.id)
@@ -169,6 +174,7 @@ def delete_account(
     db.query(CurrentlyWatching).filter_by(user_id=uid).delete()
     db.query(Watchlist).filter_by(user_id=uid).delete()
     db.query(Watched).filter_by(user_id=uid).delete()
+    db.query(Favorite).filter_by(user_id=uid).delete()
     db.query(Friendship).filter(
         (Friendship.requester_id == uid) | (Friendship.addressee_id == uid)
     ).delete()

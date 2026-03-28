@@ -17,6 +17,7 @@ interface PublicProfile {
   id: string;
   username: string;
   is_friend: boolean;
+  favorites?: { movies: MediaItem[]; shows: MediaItem[] };
   watchlist?: { movies: MediaItem[]; shows: MediaItem[] };
   watched?: { movies: MediaItem[]; shows: MediaItem[] };
 }
@@ -37,9 +38,12 @@ export default function FriendProfilePage() {
       setError(null);
       try {
         const token = await firebaseUser.getIdToken();
-        const res = await fetch(`${API_URL}/user/profile/${encodeURIComponent(username)}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
+        const res = await fetch(
+          `${API_URL}/user/profile/${encodeURIComponent(username)}`,
+          {
+            headers: { Authorization: `Bearer ${token}` },
+          },
+        );
         if (res.status === 404) {
           setError("User not found.");
         } else if (!res.ok) {
@@ -61,11 +65,16 @@ export default function FriendProfilePage() {
   }
 
   if (error || !profile) {
-    return <div className="p-8 text-center text-slate-400">{error ?? "Something went wrong."}</div>;
+    return (
+      <div className="p-8 text-center text-slate-400">
+        {error ?? "Something went wrong."}
+      </div>
+    );
   }
 
   const watchlist = profile.watchlist;
   const watched = profile.watched;
+  const favorites = profile.favorites;
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-8 space-y-8">
@@ -83,6 +92,40 @@ export default function FriendProfilePage() {
           )}
         </div>
       </div>
+
+      {/* Favorites — always visible */}
+      {favorites &&
+        (favorites.movies.length > 0 || favorites.shows.length > 0) && (
+          <div className="bg-slate-800 rounded-lg p-4 space-y-4">
+            <h2 className="text-lg font-semibold text-white">Favorites</h2>
+
+            {favorites.movies.length > 0 && (
+              <div>
+                <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-3">
+                  Movies ({favorites.movies.length})
+                </h3>
+                <ExpandableMediaList
+                  items={favorites.movies}
+                  linkPrefix="/movie"
+                  fallbackImage="/src/assets/movie-icon.png"
+                />
+              </div>
+            )}
+
+            {favorites.shows.length > 0 && (
+              <div>
+                <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-3">
+                  TV Shows ({favorites.shows.length})
+                </h3>
+                <ExpandableMediaList
+                  items={favorites.shows}
+                  linkPrefix="/tv"
+                  fallbackImage="/src/assets/tv-icon.png"
+                />
+              </div>
+            )}
+          </div>
+        )}
 
       {/* Lists — only shown to friends */}
       {profile.is_friend && watchlist && watched && (
@@ -118,7 +161,9 @@ export default function FriendProfilePage() {
             )}
 
             {watchlist.movies.length === 0 && watchlist.shows.length === 0 && (
-              <p className="text-slate-400 text-sm">Nothing on their watchlist.</p>
+              <p className="text-slate-400 text-sm">
+                Nothing on their watchlist.
+              </p>
             )}
           </div>
 

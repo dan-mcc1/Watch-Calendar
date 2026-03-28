@@ -44,14 +44,26 @@ export default function ProfilePage() {
   const [dbUser, setDbUser] = useState<DBUser | null>(null);
   const [token, setToken] = useState<string | null>(null);
 
-  const [watchlist, setWatchlist] = useState<{ movies: Movie[]; shows: Show[] }>({ movies: [], shows: [] });
-  const [watched, setWatched] = useState<{ movies: Movie[]; shows: Show[] }>({ movies: [], shows: [] });
+  const [watchlist, setWatchlist] = useState<{
+    movies: Movie[];
+    shows: Show[];
+  }>({ movies: [], shows: [] });
+  const [watched, setWatched] = useState<{ movies: Movie[]; shows: Show[] }>({
+    movies: [],
+    shows: [],
+  });
+  const [favorites, setFavorites] = useState<{
+    movies: Movie[];
+    shows: Show[];
+  }>({ movies: [], shows: [] });
   const [loading, setLoading] = useState(true);
 
   // Username editing
   const [editingUsername, setEditingUsername] = useState(false);
   const [newUsername, setNewUsername] = useState("");
-  const [usernameAvailable, setUsernameAvailable] = useState<boolean | null>(null);
+  const [usernameAvailable, setUsernameAvailable] = useState<boolean | null>(
+    null,
+  );
   const [usernameChecking, setUsernameChecking] = useState(false);
   const [usernameError, setUsernameError] = useState<string | null>(null);
   const [usernameSaving, setUsernameSaving] = useState(false);
@@ -64,9 +76,15 @@ export default function ProfilePage() {
 
   async function fetchFriends(tok: string) {
     const [friendsRes, incomingRes, outgoingRes] = await Promise.all([
-      fetch(`${API_URL}/friends/`, { headers: { Authorization: `Bearer ${tok}` } }),
-      fetch(`${API_URL}/friends/requests/incoming`, { headers: { Authorization: `Bearer ${tok}` } }),
-      fetch(`${API_URL}/friends/requests/outgoing`, { headers: { Authorization: `Bearer ${tok}` } }),
+      fetch(`${API_URL}/friends/`, {
+        headers: { Authorization: `Bearer ${tok}` },
+      }),
+      fetch(`${API_URL}/friends/requests/incoming`, {
+        headers: { Authorization: `Bearer ${tok}` },
+      }),
+      fetch(`${API_URL}/friends/requests/outgoing`, {
+        headers: { Authorization: `Bearer ${tok}` },
+      }),
     ]);
     setFriends(friendsRes.ok ? await friendsRes.json() : []);
     setIncoming(incomingRes.ok ? await incomingRes.json() : []);
@@ -79,15 +97,33 @@ export default function ProfilePage() {
       const tok = await firebaseUser.getIdToken();
       setToken(tok);
 
-      const [watchlistRes, watchedRes, meRes] = await Promise.all([
-        fetch(`${API_URL}/watchlist`, { headers: { Authorization: `Bearer ${tok}` } }),
-        fetch(`${API_URL}/watched`, { headers: { Authorization: `Bearer ${tok}` } }),
-        fetch(`${API_URL}/user/me`, { headers: { Authorization: `Bearer ${tok}` } }),
-      ]);
+      const [watchlistRes, watchedRes, meRes, favoritesRes] = await Promise.all(
+        [
+          fetch(`${API_URL}/watchlist`, {
+            headers: { Authorization: `Bearer ${tok}` },
+          }),
+          fetch(`${API_URL}/watched`, {
+            headers: { Authorization: `Bearer ${tok}` },
+          }),
+          fetch(`${API_URL}/user/me`, {
+            headers: { Authorization: `Bearer ${tok}` },
+          }),
+          fetch(`${API_URL}/favorites`, {
+            headers: { Authorization: `Bearer ${tok}` },
+          }),
+        ],
+      );
 
-      setWatchlist(watchlistRes.ok ? await watchlistRes.json() : { movies: [], shows: [] });
-      setWatched(watchedRes.ok ? await watchedRes.json() : { movies: [], shows: [] });
+      setWatchlist(
+        watchlistRes.ok ? await watchlistRes.json() : { movies: [], shows: [] },
+      );
+      setWatched(
+        watchedRes.ok ? await watchedRes.json() : { movies: [], shows: [] },
+      );
       setDbUser(meRes.ok ? await meRes.json() : null);
+      setFavorites(
+        favoritesRes.ok ? await favoritesRes.json() : { movies: [], shows: [] },
+      );
 
       await fetchFriends(tok);
     } catch (err) {
@@ -107,10 +143,15 @@ export default function ProfilePage() {
 
   // Username availability check
   async function checkUsername(value: string) {
-    if (!USERNAME_RE.test(value)) { setUsernameAvailable(null); return; }
+    if (!USERNAME_RE.test(value)) {
+      setUsernameAvailable(null);
+      return;
+    }
     setUsernameChecking(true);
     try {
-      const res = await fetch(`${API_URL}/user/check-username?username=${encodeURIComponent(value)}`);
+      const res = await fetch(
+        `${API_URL}/user/check-username?username=${encodeURIComponent(value)}`,
+      );
       const data = await res.json();
       setUsernameAvailable(data.available);
     } catch {
@@ -142,7 +183,10 @@ export default function ProfilePage() {
     try {
       const res = await fetch(`${API_URL}/user/update-username`, {
         method: "PUT",
-        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify({ new_username: newUsername }),
       });
       if (res.ok) {
@@ -200,36 +244,55 @@ export default function ProfilePage() {
                   {usernameSaving ? "Saving…" : "Save"}
                 </button>
                 <button
-                  onClick={() => { setEditingUsername(false); setNewUsername(""); setUsernameError(null); }}
+                  onClick={() => {
+                    setEditingUsername(false);
+                    setNewUsername("");
+                    setUsernameError(null);
+                  }}
                   className="text-slate-400 hover:text-slate-200 text-sm"
                 >
                   Cancel
                 </button>
               </div>
               {newUsername.length >= 3 && (
-                <p className={`text-xs pl-1 ${
-                  usernameChecking ? "text-slate-400"
-                  : usernameAvailable === true ? "text-green-400"
-                  : usernameAvailable === false ? "text-red-400"
-                  : "text-slate-400"
-                }`}>
-                  {usernameChecking ? "Checking…"
-                    : usernameAvailable === true ? "Available"
-                    : usernameAvailable === false ? "Already taken"
-                    : ""}
+                <p
+                  className={`text-xs pl-1 ${
+                    usernameChecking
+                      ? "text-slate-400"
+                      : usernameAvailable === true
+                        ? "text-green-400"
+                        : usernameAvailable === false
+                          ? "text-red-400"
+                          : "text-slate-400"
+                  }`}
+                >
+                  {usernameChecking
+                    ? "Checking…"
+                    : usernameAvailable === true
+                      ? "Available"
+                      : usernameAvailable === false
+                        ? "Already taken"
+                        : ""}
                 </p>
               )}
-              {usernameError && <p className="text-red-400 text-xs pl-1">{usernameError}</p>}
+              {usernameError && (
+                <p className="text-red-400 text-xs pl-1">{usernameError}</p>
+              )}
             </div>
           ) : (
             <div className="mt-1 flex items-center gap-2">
               {dbUser?.username ? (
-                <span className="text-slate-300 text-sm">@{dbUser.username}</span>
+                <span className="text-slate-300 text-sm">
+                  @{dbUser.username}
+                </span>
               ) : (
                 <span className="text-amber-400 text-sm">No username set</span>
               )}
               <button
-                onClick={() => { setEditingUsername(true); setNewUsername(dbUser?.username ?? ""); }}
+                onClick={() => {
+                  setEditingUsername(true);
+                  setNewUsername(dbUser?.username ?? "");
+                }}
                 className="text-xs text-blue-400 hover:text-blue-300"
               >
                 {dbUser?.username ? "Edit" : "Set username"}
@@ -244,6 +307,69 @@ export default function ProfilePage() {
         </div>
       </div>
 
+      {/* Favorites */}
+      {(favorites.movies.length > 0 || favorites.shows.length > 0) && (
+        <div className="bg-slate-800 rounded-lg p-4">
+          <h2 className="text-lg font-semibold mb-4 text-white">Favorites</h2>
+
+          {favorites.movies.length > 0 && (
+            <div>
+              <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-400 mb-2">
+                Movies
+              </h3>
+              <div className="flex gap-4 overflow-x-auto pb-1">
+                {favorites.movies.map((movie) => (
+                  <div key={movie.id} className="flex-shrink-0 w-32">
+                    <Link to={`/movie/${movie.id}`}>
+                      <img
+                        src={
+                          movie.poster_path
+                            ? `${BASE_IMAGE_URL}/w154${movie.poster_path}`
+                            : "/src/assets/movie-icon.png"
+                        }
+                        alt={movie.title}
+                        className="w-full h-auto rounded-md object-cover"
+                      />
+                      <p className="mt-1 text-sm font-medium text-slate-200 text-center">
+                        {movie.title}
+                      </p>
+                    </Link>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {favorites.shows.length > 0 && (
+            <div className={favorites.movies.length > 0 ? "mt-4" : ""}>
+              <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-400 mb-2">
+                TV Shows
+              </h3>
+              <div className="flex gap-4 overflow-x-auto pb-1">
+                {favorites.shows.map((show) => (
+                  <div key={show.id} className="flex-shrink-0 w-32">
+                    <Link to={`/tv/${show.id}`}>
+                      <img
+                        src={
+                          show.poster_path
+                            ? `${BASE_IMAGE_URL}/w154${show.poster_path}`
+                            : "/src/assets/tv-icon.png"
+                        }
+                        alt={show.name}
+                        className="w-full h-auto rounded-md object-cover"
+                      />
+                      <p className="mt-1 text-sm font-medium text-slate-200 text-center">
+                        {show.name}
+                      </p>
+                    </Link>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Media Lists */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Watchlist */}
@@ -252,17 +378,25 @@ export default function ProfilePage() {
 
           {watchlist.movies.length > 0 && (
             <div>
-              <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-400 mb-2">Movies</h3>
+              <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-400 mb-2">
+                Movies
+              </h3>
               <div className="flex gap-4 overflow-x-auto pb-1">
                 {watchlist.movies.slice(0, 5).map((movie) => (
                   <div key={movie.id} className="flex-shrink-0 w-32">
                     <Link to={`/movie/${movie.id}`}>
                       <img
-                        src={movie.poster_path ? `${BASE_IMAGE_URL}/w154${movie.poster_path}` : "/src/assets/movie-icon.png"}
+                        src={
+                          movie.poster_path
+                            ? `${BASE_IMAGE_URL}/w154${movie.poster_path}`
+                            : "/src/assets/movie-icon.png"
+                        }
                         alt={movie.title}
                         className="w-full h-auto rounded-md object-cover"
                       />
-                      <p className="mt-1 text-sm font-medium text-slate-200 text-center">{movie.title}</p>
+                      <p className="mt-1 text-sm font-medium text-slate-200 text-center">
+                        {movie.title}
+                      </p>
                     </Link>
                   </div>
                 ))}
@@ -272,30 +406,43 @@ export default function ProfilePage() {
 
           {watchlist.shows.length > 0 && (
             <div className="mt-4">
-              <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-400 mb-2">TV Shows</h3>
+              <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-400 mb-2">
+                TV Shows
+              </h3>
               <div className="flex gap-4 overflow-x-auto pb-1">
                 {watchlist.shows.slice(0, 5).map((show) => (
                   <div key={show.id} className="flex-shrink-0 w-32">
                     <Link to={`/tv/${show.id}`}>
                       <img
-                        src={show.poster_path ? `${BASE_IMAGE_URL}/w154${show.poster_path}` : "/src/assets/tv-icon.png"}
+                        src={
+                          show.poster_path
+                            ? `${BASE_IMAGE_URL}/w154${show.poster_path}`
+                            : "/src/assets/tv-icon.png"
+                        }
                         alt={show.name}
                         className="w-full h-auto rounded-md object-cover"
                       />
-                      <p className="mt-1 text-sm font-medium text-slate-200 text-center">{show.name}</p>
+                      <p className="mt-1 text-sm font-medium text-slate-200 text-center">
+                        {show.name}
+                      </p>
                     </Link>
                   </div>
                 ))}
               </div>
-              <Link to="/watchlist" className="text-blue-400 hover:text-blue-300 font-medium mt-2 inline-block text-sm">
+              <Link
+                to="/watchlist"
+                className="text-blue-400 hover:text-blue-300 font-medium mt-2 inline-block text-sm"
+              >
                 View full watchlist →
               </Link>
             </div>
           )}
 
-          {watchlist.movies.length === 0 && watchlist.shows.length === 0 && !loading && (
-            <p className="text-slate-400 text-sm">Your watchlist is empty.</p>
-          )}
+          {watchlist.movies.length === 0 &&
+            watchlist.shows.length === 0 &&
+            !loading && (
+              <p className="text-slate-400 text-sm">Your watchlist is empty.</p>
+            )}
         </div>
 
         {/* Watched */}
@@ -304,17 +451,25 @@ export default function ProfilePage() {
 
           {watched.movies.length > 0 && (
             <div>
-              <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-400 mb-2">Movies</h3>
+              <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-400 mb-2">
+                Movies
+              </h3>
               <div className="flex gap-4 overflow-x-auto pb-1">
                 {watched.movies.slice(0, 5).map((movie) => (
                   <div key={movie.id} className="flex-shrink-0 w-32">
                     <Link to={`/movie/${movie.id}`}>
                       <img
-                        src={movie.poster_path ? `${BASE_IMAGE_URL}/w154${movie.poster_path}` : "/src/assets/movie-icon.png"}
+                        src={
+                          movie.poster_path
+                            ? `${BASE_IMAGE_URL}/w154${movie.poster_path}`
+                            : "/src/assets/movie-icon.png"
+                        }
                         alt={movie.title}
                         className="w-full h-auto rounded-md object-cover"
                       />
-                      <p className="mt-1 text-sm font-medium text-slate-200 text-center">{movie.title}</p>
+                      <p className="mt-1 text-sm font-medium text-slate-200 text-center">
+                        {movie.title}
+                      </p>
                     </Link>
                   </div>
                 ))}
@@ -324,30 +479,43 @@ export default function ProfilePage() {
 
           {watched.shows.length > 0 && (
             <div className="mt-4">
-              <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-400 mb-2">TV Shows</h3>
+              <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-400 mb-2">
+                TV Shows
+              </h3>
               <div className="flex gap-4 overflow-x-auto pb-1">
                 {watched.shows.slice(0, 5).map((show) => (
                   <div key={show.id} className="flex-shrink-0 w-32">
                     <Link to={`/tv/${show.id}`}>
                       <img
-                        src={show.poster_path ? `${BASE_IMAGE_URL}/w154${show.poster_path}` : "/src/assets/tv-icon.png"}
+                        src={
+                          show.poster_path
+                            ? `${BASE_IMAGE_URL}/w154${show.poster_path}`
+                            : "/src/assets/tv-icon.png"
+                        }
                         alt={show.name}
                         className="w-full h-auto rounded-md object-cover"
                       />
-                      <p className="mt-1 text-sm font-medium text-slate-200 text-center">{show.name}</p>
+                      <p className="mt-1 text-sm font-medium text-slate-200 text-center">
+                        {show.name}
+                      </p>
                     </Link>
                   </div>
                 ))}
               </div>
-              <Link to="/watched" className="text-blue-400 hover:text-blue-300 font-medium mt-2 inline-block text-sm">
+              <Link
+                to="/watched"
+                className="text-blue-400 hover:text-blue-300 font-medium mt-2 inline-block text-sm"
+              >
                 View full watched list →
               </Link>
             </div>
           )}
 
-          {watched.movies.length === 0 && watched.shows.length === 0 && !loading && (
-            <p className="text-slate-400 text-sm">Nothing watched yet.</p>
-          )}
+          {watched.movies.length === 0 &&
+            watched.shows.length === 0 &&
+            !loading && (
+              <p className="text-slate-400 text-sm">Nothing watched yet.</p>
+            )}
         </div>
       </div>
 

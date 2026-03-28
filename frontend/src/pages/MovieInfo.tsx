@@ -9,6 +9,7 @@ import { Link } from "react-router-dom";
 import { getAuth } from "firebase/auth";
 import { firebaseApp } from "../firebase";
 import WatchButton from "../components/WatchButton";
+import FavoriteButton from "../components/FavoriteButton";
 import { onAuthStateChanged } from "firebase/auth";
 import { usePageTitle } from "../hooks/usePageTitle";
 
@@ -171,6 +172,7 @@ export default function MovieInfo() {
         {/* Genres + watch button + trailer */}
         <div className="flex flex-wrap items-center gap-3">
           {user && <WatchButton contentType="movie" contentId={movie.id} />}
+          {user && <FavoriteButton contentType="movie" contentId={movie.id} />}
           {trailer && (
             <a
               href={`https://www.youtube.com/watch?v=${trailer.key}`}

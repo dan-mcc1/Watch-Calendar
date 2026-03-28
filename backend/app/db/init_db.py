@@ -16,6 +16,7 @@ from app.models.season import Season
 from app.models.friendship import Friendship
 from app.models.currently_watching import CurrentlyWatching
 from app.models.activity import Activity
+from app.models.favorite import Favorite
 
 
 def init_db():

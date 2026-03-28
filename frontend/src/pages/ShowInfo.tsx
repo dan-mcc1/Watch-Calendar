@@ -8,6 +8,7 @@ import WhereToWatch from "../components/WhereToWatch";
 import CastBar from "../components/CastBar";
 import { Link } from "react-router-dom";
 import WatchButton from "../components/WatchButton";
+import FavoriteButton from "../components/FavoriteButton";
 import { firebaseApp } from "../firebase";
 import { getAuth, onAuthStateChanged } from "firebase/auth";
 import { usePageTitle } from "../hooks/usePageTitle";
@@ -170,6 +171,7 @@ export default function ShowInfo() {
         {/* Top meta row: genres + watch button + trailer */}
         <div className="flex flex-wrap items-center gap-3">
           {user && <WatchButton contentType="tv" contentId={show.id} />}
+          {user && <FavoriteButton contentType="tv" contentId={show.id} />}
           {trailer && (
             <a
               href={`https://www.youtube.com/watch?v=${trailer.key}`}
