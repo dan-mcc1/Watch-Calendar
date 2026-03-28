@@ -212,6 +212,14 @@ export default function WatchButton({
 
       if (watchStatus === targetStatus) return;
 
+      // Add to target state first so the new entry exists before the old one
+      // is removed. This prevents cleanup logic in the remove handlers from
+      // treating the show as untracked (e.g. deleting episode history).
+      const addUrl = addEndpoints[targetStatus];
+      if (addUrl) {
+        await fetch(`${API_URL}/${addUrl}`, { method: "POST", headers, body });
+      }
+
       // Remove from current state
       const removeUrl = removeEndpoints[watchStatus];
       if (removeUrl) {
@@ -220,12 +228,6 @@ export default function WatchButton({
           headers,
           body,
         });
-      }
-
-      // Add to target state
-      const addUrl = addEndpoints[targetStatus];
-      if (addUrl) {
-        await fetch(`${API_URL}/${addUrl}`, { method: "POST", headers, body });
       }
 
       setWatchStatus(targetStatus);

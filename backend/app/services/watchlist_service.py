@@ -416,7 +416,12 @@ def remove_from_watchlist(
                 .first()
             )
 
-        if show.tracking_count <= 0 and not watched_exists:
+        currently_watching_exists = (
+            db.query(CurrentlyWatching)
+            .filter_by(content_id=content_id, content_type="tv")
+            .first()
+        )
+        if show.tracking_count <= 0 and not watched_exists and not currently_watching_exists:
             db.query(EpisodeWatched).filter_by(show_id=content_id).delete()
             db.query(Episode).filter_by(show_id=content_id).delete()
             db.delete(show)
