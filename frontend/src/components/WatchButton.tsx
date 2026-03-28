@@ -17,6 +17,7 @@ interface WatchButtonProps {
   /** When provided by a parent doing a bulk fetch, skip the per-item status request. */
   initialStatus?: WatchStatus;
   initialRating?: number | null;
+  onStatusChange?: (status: WatchStatus) => void;
 }
 
 // ── Icons ──────────────────────────────────────────────────────────────────
@@ -115,6 +116,7 @@ export default function WatchButton({
   contentId,
   initialStatus,
   initialRating,
+  onStatusChange,
 }: WatchButtonProps) {
   const auth = getAuth(firebaseApp);
   const [watchStatus, setWatchStatus] = useState<WatchStatus>(
@@ -231,6 +233,7 @@ export default function WatchButton({
       }
 
       setWatchStatus(targetStatus);
+      onStatusChange?.(targetStatus);
       if (targetStatus !== "Watched") setRating(null);
       setMenuOpen(false);
       clearDashboardCache();

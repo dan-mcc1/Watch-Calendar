@@ -4,6 +4,7 @@ import { firebaseApp } from "../firebase";
 import { API_URL, BASE_IMAGE_URL } from "../constants";
 import { Link, useNavigate } from "react-router-dom";
 import { usePageTitle } from "../hooks/usePageTitle";
+import WatchButton from "../components/WatchButton";
 
 interface ActivityItem {
   id: number;
@@ -119,6 +120,12 @@ function ActivityRow({ item, currentUserId }: { item: ActivityItem; currentUserI
           <span className="text-xs text-slate-500">{timeAgo(item.created_at)}</span>
         </div>
       </div>
+
+      {!isMe && (
+        <div className="flex-shrink-0 self-center">
+          <WatchButton contentType={item.content_type} contentId={item.content_id} />
+        </div>
+      )}
     </div>
   );
 }
@@ -187,6 +194,14 @@ function RecommendationRow({
             </button>
           )}
         </div>
+      </div>
+
+      <div className="flex-shrink-0 self-center">
+        <WatchButton
+          contentType={item.content_type}
+          contentId={item.content_id}
+          onStatusChange={(status) => { if (status !== "none") handleRead(); }}
+        />
       </div>
     </div>
   );

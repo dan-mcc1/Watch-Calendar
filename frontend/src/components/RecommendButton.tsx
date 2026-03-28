@@ -119,8 +119,18 @@ export default function RecommendButton({
         onClick={handleOpen}
         className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-300 text-sm font-semibold transition-colors"
       >
-        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+        <svg
+          className="w-4 h-4"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={2}
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"
+          />
         </svg>
         Recommend
       </button>
@@ -134,9 +144,11 @@ export default function RecommendButton({
             {sent ? (
               <div className="text-center py-4">
                 <div className="text-3xl mb-3">✓</div>
-                <p className="text-white font-semibold text-lg mb-1">Recommendation sent!</p>
+                <p className="text-white font-semibold text-lg mb-1">
+                  Recommendation sent!
+                </p>
                 <p className="text-slate-400 text-sm mb-6">
-                  {selected} will get an email notification.
+                  {selected} will be notified.
                 </p>
                 <button
                   onClick={handleClose}
@@ -147,7 +159,9 @@ export default function RecommendButton({
               </div>
             ) : (
               <>
-                <h2 className="text-white font-bold text-lg mb-1">Recommend to a friend</h2>
+                <h2 className="text-white font-bold text-lg mb-1">
+                  Recommend to a friend
+                </h2>
                 <p className="text-slate-400 text-sm mb-4 line-clamp-1">
                   {contentTitle}
                 </p>

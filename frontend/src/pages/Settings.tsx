@@ -47,7 +47,10 @@ export default function Settings() {
     try {
       const res = await fetch(`${API_URL}/notifications/preferences`, {
         method: "PATCH",
-        headers: { Authorization: `Bearer ${await u.getIdToken()}`, "Content-Type": "application/json" },
+        headers: {
+          Authorization: `Bearer ${await u.getIdToken()}`,
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify({ email_notifications: next }),
       });
       if (res.ok) setEmailNotifications(next);
@@ -60,7 +63,12 @@ export default function Settings() {
 
   const handleDelete = async () => {
     if (!user) return;
-    if (!window.confirm("Are you sure you want to permanently delete your account? This cannot be undone.")) return;
+    if (
+      !window.confirm(
+        "Are you sure you want to permanently delete your account? This cannot be undone.",
+      )
+    )
+      return;
     setError(null);
 
     try {
@@ -78,7 +86,9 @@ export default function Settings() {
     } catch (err: any) {
       console.error("Error deleting account:", err);
       if (err.code === "auth/requires-recent-login") {
-        setError("Please sign out and sign back in before deleting your account.");
+        setError(
+          "Please sign out and sign back in before deleting your account.",
+        );
       } else {
         setError(err.message);
       }
@@ -114,24 +124,27 @@ export default function Settings() {
 
         {/* Email notifications toggle */}
         <div className="flex items-center justify-between">
-            <div>
-              <p className="text-white font-medium">Email Notifications</p>
-              <p className="text-gray-400 text-sm">Weekly digest of upcoming releases</p>
-            </div>
-            <button
-              onClick={toggleEmailNotifications}
-              disabled={notifSaving}
-              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors disabled:opacity-50 ${
-                emailNotifications ? "bg-blue-600" : "bg-slate-600"
-              }`}
-            >
-              <span
-                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                  emailNotifications ? "translate-x-6" : "translate-x-1"
-                }`}
-              />
-            </button>
+          <div>
+            <p className="text-white font-medium">Email Notifications</p>
+            <p className="text-gray-400 text-sm">
+              Daily digest of shows and movies releasing and emails when a
+              friend sends a recommendation.
+            </p>
           </div>
+          <button
+            onClick={toggleEmailNotifications}
+            disabled={notifSaving}
+            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors disabled:opacity-50 ${
+              emailNotifications ? "bg-blue-600" : "bg-slate-600"
+            }`}
+          >
+            <span
+              className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                emailNotifications ? "translate-x-6" : "translate-x-1"
+              }`}
+            />
+          </button>
+        </div>
 
         <button
           onClick={handleSignOut}

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   signInWithEmailAndPassword,
   GoogleAuthProvider,
@@ -57,14 +57,19 @@ const SignIn: React.FC = () => {
     }
   }
 
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   function handleUsernameChange(e: React.ChangeEvent<HTMLInputElement>) {
     const value = e.target.value;
     setUsername(value);
     setUsernameAvailable(null);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
     if (value.length >= 3) {
-      checkUsernameAvailability(value);
+      debounceRef.current = setTimeout(() => checkUsernameAvailability(value), 400);
     }
   }
+
+  useEffect(() => () => { if (debounceRef.current) clearTimeout(debounceRef.current); }, []);
 
   async function registerUserInBackend(uid: string, email: string | null, username: string) {
     const res = await fetch(`${API_URL}/user/create`, {
