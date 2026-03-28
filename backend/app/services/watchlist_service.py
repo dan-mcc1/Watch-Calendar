@@ -278,6 +278,17 @@ def add_to_watchlist(db: Session, user_id: str, content_type: str, content_id: i
     if existing:
         return existing
 
+    # Only increment tracking_count if not already on any other list
+    already_tracked = (
+        db.query(CurrentlyWatching)
+        .filter_by(user_id=user_id, content_type=content_type, content_id=content_id)
+        .first()
+    ) is not None or (
+        db.query(Watched)
+        .filter_by(user_id=user_id, content_type=content_type, content_id=content_id)
+        .first()
+    ) is not None
+
     entry = Watchlist(
         user_id=user_id,
         content_type=content_type,
@@ -289,7 +300,8 @@ def add_to_watchlist(db: Session, user_id: str, content_type: str, content_id: i
     if content_type == "movie":
         movie = db.query(Movie).filter_by(id=content_id).first()
         if movie:
-            movie.tracking_count += 1
+            if not already_tracked:
+                movie.tracking_count += 1
         else:
             movie_data = fetch_movie_from_tmdb(
                 content_id, "watch/providers,release_dates,images"
@@ -328,7 +340,8 @@ def add_to_watchlist(db: Session, user_id: str, content_type: str, content_id: i
     elif content_type == "tv":
         show = db.query(Show).filter_by(id=content_id).first()
         if show:
-            show.tracking_count += 1
+            if not already_tracked:
+                show.tracking_count += 1
         else:
             show_data = fetch_show_from_tmdb(content_id, "watch/providers,images")
             if not show_data or not show_data.get("name"):
@@ -400,37 +413,31 @@ def remove_from_watchlist(
 
     db.delete(entry)
 
+    # Only decrement tracking_count if not still on any other list
+    still_tracked = (
+        db.query(CurrentlyWatching)
+        .filter_by(user_id=user_id, content_type=content_type, content_id=content_id)
+        .first()
+    ) is not None or (
+        db.query(Watched)
+        .filter_by(user_id=user_id, content_type=content_type, content_id=content_id)
+        .first()
+    ) is not None
+
     if content_type == "movie":
         movie = db.query(Movie).filter_by(id=content_id).first()
-        if movie:
+        if movie and not still_tracked:
             movie.tracking_count -= 1
-            watched_exists = (
-                db.query(Watched)
-                .filter_by(content_id=content_id, content_type="movie")
-                .first()
-            )
-
-        if movie.tracking_count <= 0 and not watched_exists:
-            db.delete(movie)
+            if movie.tracking_count <= 0:
+                db.delete(movie)
     elif content_type == "tv":
         show = db.query(Show).filter_by(id=content_id).first()
-        if show:
+        if show and not still_tracked:
             show.tracking_count -= 1
-            watched_exists = (
-                db.query(Watched)
-                .filter_by(content_id=content_id, content_type="tv")
-                .first()
-            )
-
-        currently_watching_exists = (
-            db.query(CurrentlyWatching)
-            .filter_by(content_id=content_id, content_type="tv")
-            .first()
-        )
-        if show.tracking_count <= 0 and not watched_exists and not currently_watching_exists:
-            db.query(EpisodeWatched).filter_by(show_id=content_id).delete()
-            db.query(Episode).filter_by(show_id=content_id).delete()
-            db.delete(show)
+            if show.tracking_count <= 0:
+                db.query(EpisodeWatched).filter_by(show_id=content_id).delete()
+                db.query(Episode).filter_by(show_id=content_id).delete()
+                db.delete(show)
 
     db.commit()
     return {"message": "Removed from watchlist"}

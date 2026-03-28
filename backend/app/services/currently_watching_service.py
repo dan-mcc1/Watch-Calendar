@@ -2,6 +2,10 @@ from sqlalchemy.orm import Session
 from app.models.currently_watching import CurrentlyWatching
 from app.models.movie import Movie
 from app.models.show import Show
+from app.models.watchlist import Watchlist
+from app.models.watched import Watched
+from app.models.episode import Episode
+from app.models.episode_watched import EpisodeWatched
 from app.services.watchlist_service import (
     serialize_show,
     serialize_movie,
@@ -28,6 +32,17 @@ def add_to_currently_watching(db: Session, user_id: str, content_type: str, cont
     )
     if existing:
         return existing
+
+    # Only increment tracking_count if not already on any other list
+    already_tracked = (
+        db.query(Watchlist)
+        .filter_by(user_id=user_id, content_type=content_type, content_id=content_id)
+        .first()
+    ) is not None or (
+        db.query(Watched)
+        .filter_by(user_id=user_id, content_type=content_type, content_id=content_id)
+        .first()
+    ) is not None
 
     entry = CurrentlyWatching(
         user_id=user_id,
@@ -62,12 +77,14 @@ def add_to_currently_watching(db: Session, user_id: str, content_type: str, cont
                 status=movie_data.get("status"),
                 title=movie_data.get("title"),
                 logo_path=logo,
-                tracking_count=0,
+                tracking_count=1,
             )
             db.add(movie)
             db.flush()
             _upsert_genres_for_movie(db, movie, movie_data.get("genres", []))
             _upsert_providers_for_movie(db, movie, us_providers)
+        elif not already_tracked:
+            movie.tracking_count += 1
 
     elif content_type == "tv":
         show = db.query(Show).filter_by(id=content_id).first()
@@ -96,7 +113,7 @@ def add_to_currently_watching(db: Session, user_id: str, content_type: str, cont
                 first_air_date=show_data.get("first_air_date"),
                 poster_path=show_data.get("poster_path"),
                 logo_path=logo,
-                tracking_count=0,
+                tracking_count=1,
                 air_time=air_time,
                 air_timezone=air_timezone,
             )
@@ -105,6 +122,8 @@ def add_to_currently_watching(db: Session, user_id: str, content_type: str, cont
             _upsert_genres_for_show(db, show, show_data.get("genres", []))
             _upsert_providers_for_show(db, show, us_providers)
             _upsert_seasons_for_show(db, show, show_data.get("seasons", []))
+        elif not already_tracked:
+            show.tracking_count += 1
 
     db.commit()
     db.refresh(entry)
@@ -124,6 +143,44 @@ def remove_from_currently_watching(db: Session, user_id: str, content_type: str,
     if not entry:
         return {"message": "Item not found in currently watching"}
     db.delete(entry)
+
+    # Only decrement tracking_count if not still on any other list
+    still_tracked = (
+        db.query(Watchlist)
+        .filter_by(user_id=user_id, content_type=content_type, content_id=content_id)
+        .first()
+    ) is not None or (
+        db.query(Watched)
+        .filter_by(user_id=user_id, content_type=content_type, content_id=content_id)
+        .first()
+    ) is not None
+
+    if not still_tracked:
+        if content_type == "movie":
+            movie = db.query(Movie).filter_by(id=content_id).first()
+            if movie:
+                movie.tracking_count -= 1
+                watched_exists = (
+                    db.query(Watched)
+                    .filter_by(content_id=content_id, content_type="movie")
+                    .first()
+                )
+                if movie.tracking_count <= 0 and not watched_exists:
+                    db.delete(movie)
+        elif content_type == "tv":
+            show = db.query(Show).filter_by(id=content_id).first()
+            if show:
+                show.tracking_count -= 1
+                watched_exists = (
+                    db.query(Watched)
+                    .filter_by(content_id=content_id, content_type="tv")
+                    .first()
+                )
+                if show.tracking_count <= 0 and not watched_exists:
+                    db.query(EpisodeWatched).filter_by(show_id=content_id).delete()
+                    db.query(Episode).filter_by(show_id=content_id).delete()
+                    db.delete(show)
+
     db.commit()
     return {"message": "Removed from currently watching"}
 

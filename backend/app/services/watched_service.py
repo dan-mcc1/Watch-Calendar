@@ -23,6 +23,8 @@ from app.services.episode_service import sync_show_episodes
 from app.services.activity_service import log_activity
 from app.models.episode import Episode
 from app.models.episode_watched import EpisodeWatched
+from app.models.watchlist import Watchlist
+from app.models.currently_watching import CurrentlyWatching
 from app.db.session import SessionLocal
 
 
@@ -40,6 +42,17 @@ def add_to_watched(
     if existing:
         return existing
 
+    # Only increment tracking_count if not already on any other list
+    already_tracked = (
+        db.query(Watchlist)
+        .filter_by(user_id=user_id, content_type=content_type, content_id=content_id)
+        .first()
+    ) is not None or (
+        db.query(CurrentlyWatching)
+        .filter_by(user_id=user_id, content_type=content_type, content_id=content_id)
+        .first()
+    ) is not None
+
     entry = Watched(
         user_id=user_id,
         content_type=content_type,
@@ -52,7 +65,8 @@ def add_to_watched(
     if content_type == "movie":
         movie = db.query(Movie).filter_by(id=content_id).first()
         if movie:
-            movie.tracking_count += 1
+            if not already_tracked:
+                movie.tracking_count += 1
         else:
             movie_data = fetch_movie_from_tmdb(
                 content_id, "watch/providers,release_dates,images"
@@ -91,7 +105,8 @@ def add_to_watched(
     elif content_type == "tv":
         show = db.query(Show).filter_by(id=content_id).first()
         if show:
-            show.tracking_count += 1
+            if not already_tracked:
+                show.tracking_count += 1
         else:
             show_data = fetch_show_from_tmdb(content_id, "watch/providers,images")
             if not show_data or not show_data.get("name"):
@@ -224,6 +239,34 @@ def remove_from_watched(db: Session, user_id: str, content_type: str, content_id
             db.query(EpisodeWatched).filter_by(
                 user_id=user_id, show_id=content_id
             ).delete()
+
+        # Only decrement tracking_count if not still on any other list
+        still_tracked = (
+            db.query(Watchlist)
+            .filter_by(user_id=user_id, content_type=content_type, content_id=content_id)
+            .first()
+        ) is not None or (
+            db.query(CurrentlyWatching)
+            .filter_by(user_id=user_id, content_type=content_type, content_id=content_id)
+            .first()
+        ) is not None
+
+        if not still_tracked:
+            if content_type == "movie":
+                movie = db.query(Movie).filter_by(id=content_id).first()
+                if movie:
+                    movie.tracking_count -= 1
+                    if movie.tracking_count <= 0:
+                        db.delete(movie)
+            elif content_type == "tv":
+                show = db.query(Show).filter_by(id=content_id).first()
+                if show:
+                    show.tracking_count -= 1
+                    if show.tracking_count <= 0:
+                        db.query(EpisodeWatched).filter_by(show_id=content_id).delete()
+                        db.query(Episode).filter_by(show_id=content_id).delete()
+                        db.delete(show)
+
         db.commit()
         return {"message": "Removed from watched"}
     return {"message": "Not found in watched list"}

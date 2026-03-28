@@ -68,6 +68,7 @@ const INSTRUCTIONS: Instruction[] = [
       "Go to Outlook Calendar and click 'Add calendar'",
       'Select "Subscribe from web"',
       "Paste your feed URL and click 'Import'",
+      "Wait a few minutes for the events to populate your calendar",
     ],
   },
   {
@@ -101,7 +102,7 @@ const INSTRUCTIONS: Instruction[] = [
     steps: [
       "In the Calendar app, go to your calendars",
       "Click 'Add Calendar' then click 'Add Subscription Calendar'",
-      "Paste your feed URL and click 'Subscribe'",
+      "Paste your feed URL and click 'Find'",
       "Set your preferred auto-refresh interval",
     ],
   },
