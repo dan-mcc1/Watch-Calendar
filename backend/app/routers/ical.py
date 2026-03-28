@@ -2,6 +2,7 @@ import base64
 import hashlib
 import hmac
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
@@ -130,12 +131,30 @@ def get_ical_feed(token: str, db: Session = Depends(get_db)):
             if ep.name:
                 summary += f" {ep.name}"
 
+            # Build dtstart/dtend — timed if air_time is known, all-day otherwise
+            if show.air_time:
+                try:
+                    hour, minute = map(int, show.air_time.split(":"))
+                    tz = ZoneInfo(show.air_timezone) if show.air_timezone else timezone.utc
+                    dtstart = datetime(
+                        ep.air_date.year, ep.air_date.month, ep.air_date.day,
+                        hour, minute, tzinfo=tz,
+                    )
+                    duration = timedelta(minutes=ep.runtime or 60)
+                    dtend = dtstart + duration
+                except (ValueError, ZoneInfoNotFoundError):
+                    dtstart = ep.air_date
+                    dtend = ep.air_date + timedelta(days=1)
+            else:
+                dtstart = ep.air_date
+                dtend = ep.air_date + timedelta(days=1)
+
             event = Event()
             event.add("uid", f"tv-{ep.show_id}-s{ep.season_number}e{ep.episode_number}@watchcalendar")
             event.add("dtstamp", now)
             event.add("summary", summary)
-            event.add("dtstart", ep.air_date)
-            event.add("dtend", ep.air_date + timedelta(days=1))
+            event.add("dtstart", dtstart)
+            event.add("dtend", dtend)
             if ep.overview:
                 event.add("description", ep.overview)
             cal.add_component(event)

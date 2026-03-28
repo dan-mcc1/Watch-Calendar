@@ -3,7 +3,7 @@ import type { Show, Movie, Episode, CalendarData } from "../types/calendar";
 import "react-datepicker/dist/react-datepicker.css";
 import WatchlistModal from "./WatchlistModal";
 import { User } from "firebase/auth";
-import DailyEpisodeList from "./DailyEpisodeList";
+import DayScheduleView from "./DayScheduleView";
 import { BASE_IMAGE_URL } from "../constants";
 import { parseLocalDate, toLocalISODate } from "../utils/date";
 
@@ -665,7 +665,7 @@ export default function CalendarComponent({
           </div>
           <div className="flex flex-col gap-3">
             {selectedDate.items && selectedDate.items.length > 0 ? (
-              <DailyEpisodeList dailyItems={getFilteredItems(selectedDate.items)} />
+              <DayScheduleView items={getFilteredItems(selectedDate.items)} />
             ) : (
               <p className="text-slate-500 italic">Nothing scheduled for this day.</p>
             )}
@@ -693,7 +693,7 @@ export default function CalendarComponent({
           </div>
           <div className="flex flex-col gap-3">
             {selectedDate.items && selectedDate.items.length > 0 ? (
-              <DailyEpisodeList dailyItems={getFilteredItems(selectedDate.items)} />
+              <DayScheduleView items={getFilteredItems(selectedDate.items)} />
             ) : (
               <p className="text-slate-500 italic">Nothing scheduled for this day.</p>
             )}
