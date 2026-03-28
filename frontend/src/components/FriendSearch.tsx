@@ -9,9 +9,10 @@ interface SearchResult {
 interface Props {
   token: string;
   onRequestSent: () => void;
+  friendIds?: Set<string>;
 }
 
-export default function FriendSearch({ token, onRequestSent }: Props) {
+export default function FriendSearch({ token, onRequestSent, friendIds }: Props) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
   const [sending, setSending] = useState<string | null>(null); // username being sent to
@@ -88,7 +89,9 @@ export default function FriendSearch({ token, onRequestSent }: Props) {
               className="flex items-center justify-between bg-slate-700 px-3 py-2 rounded-lg"
             >
               <span className="text-slate-100 font-medium">@{user.username}</span>
-              {sentTo.has(user.username) ? (
+              {friendIds?.has(user.id) ? (
+                <span className="text-slate-400 text-sm">Already friends</span>
+              ) : sentTo.has(user.username) ? (
                 <span className="text-green-400 text-sm">Request sent</span>
               ) : (
                 <button

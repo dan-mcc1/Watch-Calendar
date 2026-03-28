@@ -527,7 +527,11 @@ export default function ProfilePage() {
             <FriendRequests token={token} incoming={incoming} outgoing={outgoing} onUpdate={() => token && fetchFriends(token)} />
           )}
           {friendsTab === "add" && token && (
-            <FriendSearch token={token} onRequestSent={() => { if (token) fetchFriends(token); setFriendsTab("requests"); }} />
+            <FriendSearch
+              token={token}
+              friendIds={new Set(friends.map((f) => f.friend.id))}
+              onRequestSent={() => { if (token) fetchFriends(token); setFriendsTab("requests"); }}
+            />
           )}
         </div>
 
