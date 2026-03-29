@@ -57,9 +57,10 @@ def _serialize_activity(a: Activity, username: str) -> dict:
     }
 
 
-def get_activity_feed(db: Session, user_id: str, limit: int = 50) -> list:
+def _visible_friend_ids(db: Session, user_id: str) -> list[str]:
     """
-    Returns own activity + accepted friends' activity, newest first.
+    Return the IDs of accepted friends whose profile_visibility is not "private".
+    Private users' activity is hidden from the feed.
     """
     friendships = (
         db.query(Friendship)
@@ -76,7 +77,25 @@ def get_activity_feed(db: Session, user_id: str, limit: int = 50) -> list:
         f.addressee_id if f.requester_id == user_id else f.requester_id
         for f in friendships
     ]
+    if not friend_ids:
+        return []
+    # Exclude friends who have set their profile to private
+    visible = (
+        db.query(User.id)
+        .filter(
+            User.id.in_(friend_ids),
+            User.profile_visibility != "private",
+        )
+        .all()
+    )
+    return [row.id for row in visible]
 
+
+def get_activity_feed(db: Session, user_id: str, limit: int = 50) -> list:
+    """
+    Returns own activity + accepted friends' (non-private) activity, newest first.
+    """
+    friend_ids = _visible_friend_ids(db, user_id)
     visible_ids = [user_id] + friend_ids
 
     rows = (
@@ -92,22 +111,8 @@ def get_activity_feed(db: Session, user_id: str, limit: int = 50) -> list:
 
 
 def get_friends_activity(db: Session, user_id: str, limit: int = 30) -> list:
-    """Friends-only feed (used internally)."""
-    friendships = (
-        db.query(Friendship)
-        .filter(
-            or_(
-                Friendship.requester_id == user_id,
-                Friendship.addressee_id == user_id,
-            ),
-            Friendship.status == "accepted",
-        )
-        .all()
-    )
-    friend_ids = [
-        f.addressee_id if f.requester_id == user_id else f.requester_id
-        for f in friendships
-    ]
+    """Friends-only feed (used internally), excludes private profiles."""
+    friend_ids = _visible_friend_ids(db, user_id)
 
     if not friend_ids:
         return []

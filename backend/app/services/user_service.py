@@ -68,6 +68,16 @@ def update_username(db: Session, user_id: str, new_username: str):
     return user
 
 
+def update_avatar_key(db: Session, user_id: str, avatar_key: str | None):
+    user = db.query(User).filter_by(id=user_id).first()
+    if not user:
+        return None
+    user.avatar_key = avatar_key
+    db.commit()
+    db.refresh(user)
+    return user
+
+
 def is_username_available(db: Session, username: str) -> bool:
     """
     Check whether a username is available.

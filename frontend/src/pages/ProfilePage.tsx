@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { getAuth, onAuthStateChanged, User } from "firebase/auth";
 import { firebaseApp } from "../firebase";
-import { API_URL, BASE_IMAGE_URL } from "../constants";
+import { API_URL, BASE_IMAGE_URL, getAvatarColor } from "../constants";
 import { Movie, Show } from "../types/calendar";
 import { Link } from "react-router-dom";
 import FriendSearch from "../components/FriendSearch";
@@ -10,12 +10,11 @@ import FriendsList from "../components/FriendsList";
 import StatsSection from "../components/StatsSection";
 import { usePageTitle } from "../hooks/usePageTitle";
 
-const USERNAME_RE = /^[a-zA-Z0-9_]{3,30}$/;
-
 interface DBUser {
   id: string;
   email: string | null;
   username: string | null;
+  avatar_key: string | null;
 }
 
 interface FriendEntry {
@@ -37,6 +36,50 @@ interface OutgoingRequest {
 
 type FriendsTab = "friends" | "requests" | "add";
 
+/** Avatar for the profile hero: color preset → Google photo → grey fallback. */
+function HeroAvatar({
+  avatarKey,
+  photoURL,
+}: {
+  avatarKey: string | null | undefined;
+  photoURL?: string | null;
+}) {
+  const color = getAvatarColor(avatarKey);
+  const borderStyle = "4px solid rgba(255,255,255,0.2)";
+  const shadow = "0 20px 25px -5px rgba(0,0,0,0.4)";
+
+  if (!color && photoURL) {
+    return (
+      <img
+        src={photoURL}
+        alt="Profile"
+        style={{ width: 96, height: 96, borderRadius: "50%", objectFit: "cover", flexShrink: 0, border: borderStyle, boxShadow: shadow }}
+      />
+    );
+  }
+
+  return (
+    <div
+      style={{
+        width: 96,
+        height: 96,
+        borderRadius: "50%",
+        backgroundColor: color ?? "#475569",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        flexShrink: 0,
+        border: borderStyle,
+        boxShadow: shadow,
+      }}
+    >
+      <svg width={53} height={53} viewBox="0 0 24 24" fill="rgba(255,255,255,0.9)">
+        <path d="M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8v2.4h19.2v-2.4c0-3.2-6.4-4.8-9.6-4.8z" />
+      </svg>
+    </div>
+  );
+}
+
 export default function ProfilePage() {
   usePageTitle("My Profile");
   const auth = getAuth(firebaseApp);
@@ -44,29 +87,10 @@ export default function ProfilePage() {
   const [dbUser, setDbUser] = useState<DBUser | null>(null);
   const [token, setToken] = useState<string | null>(null);
 
-  const [watchlist, setWatchlist] = useState<{
-    movies: Movie[];
-    shows: Show[];
-  }>({ movies: [], shows: [] });
-  const [watched, setWatched] = useState<{ movies: Movie[]; shows: Show[] }>({
-    movies: [],
-    shows: [],
-  });
-  const [favorites, setFavorites] = useState<{
-    movies: Movie[];
-    shows: Show[];
-  }>({ movies: [], shows: [] });
+  const [watchlist, setWatchlist] = useState<{ movies: Movie[]; shows: Show[] }>({ movies: [], shows: [] });
+  const [watched, setWatched] = useState<{ movies: Movie[]; shows: Show[] }>({ movies: [], shows: [] });
+  const [favorites, setFavorites] = useState<{ movies: Movie[]; shows: Show[] }>({ movies: [], shows: [] });
   const [loading, setLoading] = useState(true);
-
-  // Username editing
-  const [editingUsername, setEditingUsername] = useState(false);
-  const [newUsername, setNewUsername] = useState("");
-  const [usernameAvailable, setUsernameAvailable] = useState<boolean | null>(
-    null,
-  );
-  const [usernameChecking, setUsernameChecking] = useState(false);
-  const [usernameError, setUsernameError] = useState<string | null>(null);
-  const [usernameSaving, setUsernameSaving] = useState(false);
 
   // Collapsible sections
   const [watchlistOpen, setWatchlistOpen] = useState(false);
@@ -81,15 +105,9 @@ export default function ProfilePage() {
 
   async function fetchFriends(tok: string) {
     const [friendsRes, incomingRes, outgoingRes] = await Promise.all([
-      fetch(`${API_URL}/friends/`, {
-        headers: { Authorization: `Bearer ${tok}` },
-      }),
-      fetch(`${API_URL}/friends/requests/incoming`, {
-        headers: { Authorization: `Bearer ${tok}` },
-      }),
-      fetch(`${API_URL}/friends/requests/outgoing`, {
-        headers: { Authorization: `Bearer ${tok}` },
-      }),
+      fetch(`${API_URL}/friends/`, { headers: { Authorization: `Bearer ${tok}` } }),
+      fetch(`${API_URL}/friends/requests/incoming`, { headers: { Authorization: `Bearer ${tok}` } }),
+      fetch(`${API_URL}/friends/requests/outgoing`, { headers: { Authorization: `Bearer ${tok}` } }),
     ]);
     setFriends(friendsRes.ok ? await friendsRes.json() : []);
     setIncoming(incomingRes.ok ? await incomingRes.json() : []);
@@ -102,33 +120,17 @@ export default function ProfilePage() {
       const tok = await firebaseUser.getIdToken();
       setToken(tok);
 
-      const [watchlistRes, watchedRes, meRes, favoritesRes] = await Promise.all(
-        [
-          fetch(`${API_URL}/watchlist`, {
-            headers: { Authorization: `Bearer ${tok}` },
-          }),
-          fetch(`${API_URL}/watched`, {
-            headers: { Authorization: `Bearer ${tok}` },
-          }),
-          fetch(`${API_URL}/user/me`, {
-            headers: { Authorization: `Bearer ${tok}` },
-          }),
-          fetch(`${API_URL}/favorites`, {
-            headers: { Authorization: `Bearer ${tok}` },
-          }),
-        ],
-      );
+      const [watchlistRes, watchedRes, meRes, favoritesRes] = await Promise.all([
+        fetch(`${API_URL}/watchlist`, { headers: { Authorization: `Bearer ${tok}` } }),
+        fetch(`${API_URL}/watched`, { headers: { Authorization: `Bearer ${tok}` } }),
+        fetch(`${API_URL}/user/me`, { headers: { Authorization: `Bearer ${tok}` } }),
+        fetch(`${API_URL}/favorites`, { headers: { Authorization: `Bearer ${tok}` } }),
+      ]);
 
-      setWatchlist(
-        watchlistRes.ok ? await watchlistRes.json() : { movies: [], shows: [] },
-      );
-      setWatched(
-        watchedRes.ok ? await watchedRes.json() : { movies: [], shows: [] },
-      );
+      setWatchlist(watchlistRes.ok ? await watchlistRes.json() : { movies: [], shows: [] });
+      setWatched(watchedRes.ok ? await watchedRes.json() : { movies: [], shows: [] });
       setDbUser(meRes.ok ? await meRes.json() : null);
-      setFavorites(
-        favoritesRes.ok ? await favoritesRes.json() : { movies: [], shows: [] },
-      );
+      setFavorites(favoritesRes.ok ? await favoritesRes.json() : { movies: [], shows: [] });
 
       await fetchFriends(tok);
     } catch (err) {
@@ -155,68 +157,6 @@ export default function ProfilePage() {
     return () => window.removeEventListener("friend-request-received", handler);
   }, [token]);
 
-  // Username availability check
-  async function checkUsername(value: string) {
-    if (!USERNAME_RE.test(value)) {
-      setUsernameAvailable(null);
-      return;
-    }
-    setUsernameChecking(true);
-    try {
-      const res = await fetch(
-        `${API_URL}/user/check-username?username=${encodeURIComponent(value)}`,
-      );
-      const data = await res.json();
-      setUsernameAvailable(data.available);
-    } catch {
-      setUsernameAvailable(null);
-    } finally {
-      setUsernameChecking(false);
-    }
-  }
-
-  function handleUsernameInput(e: React.ChangeEvent<HTMLInputElement>) {
-    const value = e.target.value;
-    setNewUsername(value);
-    setUsernameAvailable(null);
-    setUsernameError(null);
-    if (value.length >= 3) checkUsername(value);
-  }
-
-  async function saveUsername() {
-    if (!USERNAME_RE.test(newUsername)) {
-      setUsernameError("3–30 chars, letters/numbers/underscores only.");
-      return;
-    }
-    if (usernameAvailable === false) {
-      setUsernameError("That username is already taken.");
-      return;
-    }
-    setUsernameSaving(true);
-    setUsernameError(null);
-    try {
-      const res = await fetch(`${API_URL}/user/update-username`, {
-        method: "PUT",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ new_username: newUsername }),
-      });
-      if (res.ok) {
-        const updated = await res.json();
-        setDbUser(updated);
-        setEditingUsername(false);
-        setNewUsername("");
-      } else {
-        const err = await res.json().catch(() => ({}));
-        setUsernameError(err.detail ?? "Could not save username.");
-      }
-    } finally {
-      setUsernameSaving(false);
-    }
-  }
-
   if (!user) {
     return (
       <div className="p-8 text-center text-gray-400">
@@ -235,84 +175,18 @@ export default function ProfilePage() {
       {/* ── Hero banner ── */}
       <div className="rounded-2xl overflow-hidden bg-gradient-to-br from-[#1f3b4d] via-[#2d4e63] to-[#1a3040]">
         <div className="px-6 pt-8 pb-6 flex flex-col sm:flex-row items-center sm:items-end gap-5">
-          <img
-            src={user.photoURL ?? "/src/assets/avatar-placeholder.png"}
-            alt={user.displayName ?? "User Avatar"}
-            className="w-24 h-24 rounded-full object-cover border-4 border-white/20 shadow-xl flex-shrink-0"
-          />
+          <HeroAvatar avatarKey={dbUser?.avatar_key} photoURL={user.photoURL} />
           <div className="flex-1 text-center sm:text-left">
             <h1 className="text-2xl sm:text-3xl font-bold text-white">
               {user.displayName ?? "User"}
             </h1>
-
-            {editingUsername ? (
-              <div className="mt-2 flex flex-col gap-1 w-full max-w-xs mx-auto sm:mx-0">
-                <div className="flex flex-wrap gap-2 items-center justify-center sm:justify-start">
-                  <input
-                    type="text"
-                    value={newUsername}
-                    onChange={handleUsernameInput}
-                    placeholder="new_username"
-                    className="bg-white/10 text-slate-100 px-2 py-1 rounded text-sm w-36 focus:outline-none focus:ring-2 focus:ring-blue-400 placeholder-slate-400"
-                  />
-                  <button
-                    onClick={saveUsername}
-                    disabled={usernameSaving || usernameAvailable === false}
-                    className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-sm px-3 py-1 rounded"
-                  >
-                    {usernameSaving ? "Saving…" : "Save"}
-                  </button>
-                  <button
-                    onClick={() => {
-                      setEditingUsername(false);
-                      setNewUsername("");
-                      setUsernameError(null);
-                    }}
-                    className="text-slate-400 hover:text-slate-200 text-sm"
-                  >
-                    Cancel
-                  </button>
-                </div>
-                {newUsername.length >= 3 && (
-                  <p
-                    className={`text-xs pl-1 ${usernameChecking ? "text-slate-400" : usernameAvailable === true ? "text-green-400" : usernameAvailable === false ? "text-red-400" : "text-slate-400"}`}
-                  >
-                    {usernameChecking
-                      ? "Checking…"
-                      : usernameAvailable === true
-                        ? "Available"
-                        : usernameAvailable === false
-                          ? "Already taken"
-                          : ""}
-                  </p>
-                )}
-                {usernameError && (
-                  <p className="text-red-400 text-xs pl-1">{usernameError}</p>
-                )}
-              </div>
-            ) : (
-              <div className="mt-1 flex items-center gap-2 justify-center sm:justify-start">
-                {dbUser?.username ? (
-                  <span className="text-slate-300 text-sm">
-                    @{dbUser.username}
-                  </span>
-                ) : (
-                  <span className="text-amber-400 text-sm">
-                    No username set
-                  </span>
-                )}
-                <button
-                  onClick={() => {
-                    setEditingUsername(true);
-                    setNewUsername(dbUser?.username ?? "");
-                  }}
-                  className="text-xs text-blue-400 hover:text-blue-300"
-                >
-                  {dbUser?.username ? "Edit" : "Set username"}
-                </button>
-              </div>
-            )}
-
+            <div className="mt-1 flex items-center gap-2 justify-center sm:justify-start">
+              {dbUser?.username ? (
+                <span className="text-slate-300 text-sm">@{dbUser.username}</span>
+              ) : (
+                <span className="text-amber-400 text-sm">No username set</span>
+              )}
+            </div>
             <p className="text-slate-400 text-sm mt-1">{user.email}</p>
             <p className="text-slate-500 text-xs mt-0.5">
               Joined {user.metadata?.creationTime?.split("T")[0]}
@@ -343,30 +217,20 @@ export default function ProfilePage() {
           {/* Favorites */}
           {(favorites.movies.length > 0 || favorites.shows.length > 0) && (
             <div className="bg-slate-800 rounded-xl p-4">
-              <h2 className="text-base font-semibold text-white mb-3">
-                Favorites
-              </h2>
+              <h2 className="text-base font-semibold text-white mb-3">Favorites</h2>
               {favorites.movies.length > 0 && (
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">
-                    Movies
-                  </p>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Movies</p>
                   <div className="flex gap-3 overflow-x-auto pb-1">
                     {favorites.movies.map((movie) => (
                       <div key={movie.id} className="flex-shrink-0 w-28">
                         <Link to={`/movie/${movie.id}`}>
                           <img
-                            src={
-                              movie.poster_path
-                                ? `${BASE_IMAGE_URL}/w154${movie.poster_path}`
-                                : "/src/assets/movie-icon.png"
-                            }
+                            src={movie.poster_path ? `${BASE_IMAGE_URL}/w154${movie.poster_path}` : "/src/assets/movie-icon.png"}
                             alt={movie.title}
                             className="w-full h-auto rounded-lg object-cover hover:opacity-80 transition-opacity"
                           />
-                          <p className="mt-1 text-xs font-medium text-slate-300 text-center line-clamp-1">
-                            {movie.title}
-                          </p>
+                          <p className="mt-1 text-xs font-medium text-slate-300 text-center line-clamp-1">{movie.title}</p>
                         </Link>
                       </div>
                     ))}
@@ -375,25 +239,17 @@ export default function ProfilePage() {
               )}
               {favorites.shows.length > 0 && (
                 <div className={favorites.movies.length > 0 ? "mt-3" : ""}>
-                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">
-                    TV Shows
-                  </p>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">TV Shows</p>
                   <div className="flex gap-3 overflow-x-auto pb-1">
                     {favorites.shows.map((show) => (
                       <div key={show.id} className="flex-shrink-0 w-28">
                         <Link to={`/tv/${show.id}`}>
                           <img
-                            src={
-                              show.poster_path
-                                ? `${BASE_IMAGE_URL}/w154${show.poster_path}`
-                                : "/src/assets/tv-icon.png"
-                            }
+                            src={show.poster_path ? `${BASE_IMAGE_URL}/w154${show.poster_path}` : "/src/assets/tv-icon.png"}
                             alt={show.name}
                             className="w-full h-auto rounded-lg object-cover hover:opacity-80 transition-opacity"
                           />
-                          <p className="mt-1 text-xs font-medium text-slate-300 text-center line-clamp-1">
-                            {show.name}
-                          </p>
+                          <p className="mt-1 text-xs font-medium text-slate-300 text-center line-clamp-1">{show.name}</p>
                         </Link>
                       </div>
                     ))}
@@ -403,7 +259,7 @@ export default function ProfilePage() {
             </div>
           )}
 
-          {/* Watchlist + Watched + Stats — grouped in one card */}
+          {/* Watchlist + Watched */}
           <div className="bg-slate-800 rounded-xl overflow-hidden divide-y divide-slate-700">
             {/* Watchlist */}
             <div>
@@ -412,50 +268,28 @@ export default function ProfilePage() {
                 className="w-full flex items-center justify-between px-4 py-3.5 text-left hover:bg-slate-700/50 transition-colors"
               >
                 <div className="flex items-center gap-2">
-                  <span className="text-base font-semibold text-white">
-                    Watchlist
-                  </span>
-                  <span className="text-xs text-slate-400 bg-slate-700 px-1.5 py-0.5 rounded-full">
-                    {totalWatchlist}
-                  </span>
+                  <span className="text-base font-semibold text-white">Watchlist</span>
+                  <span className="text-xs text-slate-400 bg-slate-700 px-1.5 py-0.5 rounded-full">{totalWatchlist}</span>
                 </div>
-                <svg
-                  className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${watchlistOpen ? "rotate-180" : ""}`}
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  strokeWidth={2}
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M19 9l-7 7-7-7"
-                  />
+                <svg className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${watchlistOpen ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
                 </svg>
               </button>
               {watchlistOpen && (
                 <div className="px-4 pb-4">
                   {watchlist.movies.length > 0 && (
                     <div>
-                      <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">
-                        Movies
-                      </p>
+                      <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Movies</p>
                       <div className="flex gap-3 overflow-x-auto pb-1">
                         {watchlist.movies.slice(0, 5).map((movie) => (
                           <div key={movie.id} className="flex-shrink-0 w-28">
                             <Link to={`/movie/${movie.id}`}>
                               <img
-                                src={
-                                  movie.poster_path
-                                    ? `${BASE_IMAGE_URL}/w154${movie.poster_path}`
-                                    : "/src/assets/movie-icon.png"
-                                }
+                                src={movie.poster_path ? `${BASE_IMAGE_URL}/w154${movie.poster_path}` : "/src/assets/movie-icon.png"}
                                 alt={movie.title}
                                 className="w-full h-auto rounded-lg object-cover hover:opacity-80 transition-opacity"
                               />
-                              <p className="mt-1 text-xs font-medium text-slate-300 text-center line-clamp-1">
-                                {movie.title}
-                              </p>
+                              <p className="mt-1 text-xs font-medium text-slate-300 text-center line-clamp-1">{movie.title}</p>
                             </Link>
                           </div>
                         ))}
@@ -464,41 +298,28 @@ export default function ProfilePage() {
                   )}
                   {watchlist.shows.length > 0 && (
                     <div className={watchlist.movies.length > 0 ? "mt-3" : ""}>
-                      <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">
-                        TV Shows
-                      </p>
+                      <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">TV Shows</p>
                       <div className="flex gap-3 overflow-x-auto pb-1">
                         {watchlist.shows.slice(0, 5).map((show) => (
                           <div key={show.id} className="flex-shrink-0 w-28">
                             <Link to={`/tv/${show.id}`}>
                               <img
-                                src={
-                                  show.poster_path
-                                    ? `${BASE_IMAGE_URL}/w154${show.poster_path}`
-                                    : "/src/assets/tv-icon.png"
-                                }
+                                src={show.poster_path ? `${BASE_IMAGE_URL}/w154${show.poster_path}` : "/src/assets/tv-icon.png"}
                                 alt={show.name}
                                 className="w-full h-auto rounded-lg object-cover hover:opacity-80 transition-opacity"
                               />
-                              <p className="mt-1 text-xs font-medium text-slate-300 text-center line-clamp-1">
-                                {show.name}
-                              </p>
+                              <p className="mt-1 text-xs font-medium text-slate-300 text-center line-clamp-1">{show.name}</p>
                             </Link>
                           </div>
                         ))}
                       </div>
-                      <Link
-                        to="/watchlist"
-                        className="text-blue-400 hover:text-blue-300 text-sm mt-2 inline-block"
-                      >
+                      <Link to="/watchlist" className="text-blue-400 hover:text-blue-300 text-sm mt-2 inline-block">
                         View full watchlist →
                       </Link>
                     </div>
                   )}
                   {totalWatchlist === 0 && !loading && (
-                    <p className="text-slate-400 text-sm">
-                      Your watchlist is empty.
-                    </p>
+                    <p className="text-slate-400 text-sm">Your watchlist is empty.</p>
                   )}
                 </div>
               )}
@@ -511,50 +332,28 @@ export default function ProfilePage() {
                 className="w-full flex items-center justify-between px-4 py-3.5 text-left hover:bg-slate-700/50 transition-colors"
               >
                 <div className="flex items-center gap-2">
-                  <span className="text-base font-semibold text-white">
-                    Watched
-                  </span>
-                  <span className="text-xs text-slate-400 bg-slate-700 px-1.5 py-0.5 rounded-full">
-                    {totalWatched}
-                  </span>
+                  <span className="text-base font-semibold text-white">Watched</span>
+                  <span className="text-xs text-slate-400 bg-slate-700 px-1.5 py-0.5 rounded-full">{totalWatched}</span>
                 </div>
-                <svg
-                  className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${watchedOpen ? "rotate-180" : ""}`}
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  strokeWidth={2}
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M19 9l-7 7-7-7"
-                  />
+                <svg className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${watchedOpen ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
                 </svg>
               </button>
               {watchedOpen && (
                 <div className="px-4 pb-4">
                   {watched.movies.length > 0 && (
                     <div>
-                      <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">
-                        Movies
-                      </p>
+                      <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Movies</p>
                       <div className="flex gap-3 overflow-x-auto pb-1">
                         {watched.movies.slice(0, 5).map((movie) => (
                           <div key={movie.id} className="flex-shrink-0 w-28">
                             <Link to={`/movie/${movie.id}`}>
                               <img
-                                src={
-                                  movie.poster_path
-                                    ? `${BASE_IMAGE_URL}/w154${movie.poster_path}`
-                                    : "/src/assets/movie-icon.png"
-                                }
+                                src={movie.poster_path ? `${BASE_IMAGE_URL}/w154${movie.poster_path}` : "/src/assets/movie-icon.png"}
                                 alt={movie.title}
                                 className="w-full h-auto rounded-lg object-cover hover:opacity-80 transition-opacity"
                               />
-                              <p className="mt-1 text-xs font-medium text-slate-300 text-center line-clamp-1">
-                                {movie.title}
-                              </p>
+                              <p className="mt-1 text-xs font-medium text-slate-300 text-center line-clamp-1">{movie.title}</p>
                             </Link>
                           </div>
                         ))}
@@ -563,69 +362,44 @@ export default function ProfilePage() {
                   )}
                   {watched.shows.length > 0 && (
                     <div className={watched.movies.length > 0 ? "mt-3" : ""}>
-                      <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">
-                        TV Shows
-                      </p>
+                      <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">TV Shows</p>
                       <div className="flex gap-3 overflow-x-auto pb-1">
                         {watched.shows.slice(0, 5).map((show) => (
                           <div key={show.id} className="flex-shrink-0 w-28">
                             <Link to={`/tv/${show.id}`}>
                               <img
-                                src={
-                                  show.poster_path
-                                    ? `${BASE_IMAGE_URL}/w154${show.poster_path}`
-                                    : "/src/assets/tv-icon.png"
-                                }
+                                src={show.poster_path ? `${BASE_IMAGE_URL}/w154${show.poster_path}` : "/src/assets/tv-icon.png"}
                                 alt={show.name}
                                 className="w-full h-auto rounded-lg object-cover hover:opacity-80 transition-opacity"
                               />
-                              <p className="mt-1 text-xs font-medium text-slate-300 text-center line-clamp-1">
-                                {show.name}
-                              </p>
+                              <p className="mt-1 text-xs font-medium text-slate-300 text-center line-clamp-1">{show.name}</p>
                             </Link>
                           </div>
                         ))}
                       </div>
-                      <Link
-                        to="/watched"
-                        className="text-blue-400 hover:text-blue-300 text-sm mt-2 inline-block"
-                      >
+                      <Link to="/watched" className="text-blue-400 hover:text-blue-300 text-sm mt-2 inline-block">
                         View full watched list →
                       </Link>
                     </div>
                   )}
                   {totalWatched === 0 && !loading && (
-                    <p className="text-slate-400 text-sm">
-                      Nothing watched yet.
-                    </p>
+                    <p className="text-slate-400 text-sm">Nothing watched yet.</p>
                   )}
                 </div>
               )}
             </div>
           </div>
 
-          {/* Stats — separate card */}
+          {/* Stats */}
           {token && (
             <div className="bg-slate-800 rounded-xl overflow-hidden">
               <button
                 onClick={() => setStatsOpen((o) => !o)}
                 className="w-full flex items-center justify-between px-4 py-3.5 text-left hover:bg-slate-700/50 transition-colors"
               >
-                <span className="text-base font-semibold text-white">
-                  Stats
-                </span>
-                <svg
-                  className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${statsOpen ? "rotate-180" : ""}`}
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  strokeWidth={2}
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M19 9l-7 7-7-7"
-                  />
+                <span className="text-base font-semibold text-white">Stats</span>
+                <svg className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${statsOpen ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
                 </svg>
               </button>
               {statsOpen && (
@@ -668,19 +442,10 @@ export default function ProfilePage() {
           </div>
 
           {friendsTab === "friends" && token && (
-            <FriendsList
-              token={token}
-              friends={friends}
-              onUpdate={() => token && fetchFriends(token)}
-            />
+            <FriendsList token={token} friends={friends} onUpdate={() => token && fetchFriends(token)} />
           )}
           {friendsTab === "requests" && token && (
-            <FriendRequests
-              token={token}
-              incoming={incoming}
-              outgoing={outgoing}
-              onUpdate={() => token && fetchFriends(token)}
-            />
+            <FriendRequests token={token} incoming={incoming} outgoing={outgoing} onUpdate={() => token && fetchFriends(token)} />
           )}
           {friendsTab === "add" && token && (
             <FriendSearch

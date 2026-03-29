@@ -8,6 +8,7 @@ from app.services.user_service import (
     get_user,
     update_user_email,
     update_username,
+    update_avatar_key,
     is_username_available,
 )
 from app.services.friends_service import are_friends
@@ -88,6 +89,25 @@ def update_username_route(
     return user
 
 
+VALID_AVATAR_KEYS = {
+    "blue", "purple", "green", "red", "orange", "teal", "pink", "yellow",
+}
+
+
+@router.put("/update-avatar")
+def update_avatar_route(
+    avatar_key: str | None = Body(None, embed=True),
+    db: Session = Depends(get_db),
+    uid: str = Depends(get_current_user),
+):
+    if avatar_key is not None and avatar_key not in VALID_AVATAR_KEYS:
+        raise HTTPException(status_code=422, detail="Invalid avatar key.")
+    user = update_avatar_key(db, uid, avatar_key)
+    if user is None:
+        raise HTTPException(status_code=404, detail="User not found.")
+    return user
+
+
 @router.get("/check-username")
 def check_username_route(
     username: str = Query(...),
@@ -125,13 +145,24 @@ def get_public_profile(
         raise HTTPException(status_code=400, detail="Use /user/me for your own profile.")
 
     is_friend = are_friends(db, uid, target.id)
+    visibility = target.profile_visibility or "friends_only"
 
-    profile = {"id": target.id, "username": target.username, "is_friend": is_friend}
+    profile = {
+        "id": target.id,
+        "username": target.username,
+        "is_friend": is_friend,
+        "profile_visibility": visibility,
+    }
 
     # Favorites are always public
     profile["favorites"] = get_favorites(db, target.id)
 
-    if is_friend:
+    # Watchlist and watched respect the target user's visibility setting
+    can_see_details = (
+        visibility == "public"
+        or (visibility == "friends_only" and is_friend)
+    )
+    if can_see_details:
         profile["watchlist"] = get_profile_watchlist(db, target.id)
         profile["watched"] = get_profile_watched(db, target.id)
 

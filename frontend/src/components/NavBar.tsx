@@ -12,7 +12,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useLocation, Link, useNavigate } from "react-router-dom";
 import { onIdTokenChanged, getAuth, signOut } from "firebase/auth";
 import { firebaseApp } from "../firebase";
-import { API_URL } from "../constants";
+import { API_URL, getAvatarColor } from "../constants";
 
 const discoverLinks = [
   { name: "Trending", href: "/trending" },
@@ -92,6 +92,7 @@ export default function NavBar() {
   const [searchQuery, setSearchQuery] = useState("");
   const [pendingRequests, setPendingRequests] = useState(0);
   const [unreadRecs, setUnreadRecs] = useState(0);
+  const [avatarKey, setAvatarKey] = useState<string | null>(null);
   const esRef = useRef<EventSource | null>(null);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -120,6 +121,20 @@ export default function NavBar() {
     }
   }, []);
 
+  const fetchAvatar = useCallback(async (token: string) => {
+    try {
+      const res = await fetch(`${API_URL}/user/me`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setAvatarKey(data.avatar_key ?? null);
+      }
+    } catch {
+      // non-critical
+    }
+  }, []);
+
   // onIdTokenChanged fires on login, logout, and token refresh (~every hour).
   // We close and reopen the SSE connection each time so the token stays valid.
   useEffect(() => {
@@ -137,6 +152,7 @@ export default function NavBar() {
       setUser(currentUser);
       const token = await currentUser.getIdToken();
       fetchCounts(token);
+      fetchAvatar(token);
 
       // EventSource can't send custom headers, so token goes in the query string
       const es = new EventSource(
@@ -181,6 +197,17 @@ export default function NavBar() {
     window.addEventListener("rec-marked-read", handler);
     return () => window.removeEventListener("rec-marked-read", handler);
   }, []);
+
+  // Re-fetch avatar when the user saves a new one from Settings
+  useEffect(() => {
+    function handler() {
+      const currentUser = auth.currentUser;
+      if (!currentUser) return;
+      currentUser.getIdToken().then(fetchAvatar).catch(() => {});
+    }
+    window.addEventListener("avatar-updated", handler);
+    return () => window.removeEventListener("avatar-updated", handler);
+  }, [fetchAvatar]);
 
   // Decrement immediately when a friend request is accepted or declined on the same page
   useEffect(() => {
@@ -284,11 +311,22 @@ export default function NavBar() {
                   <span className="absolute -inset-1.5" />
                   <span className="sr-only">Open user menu</span>
                   <div className="relative">
-                    <img
-                      src={user.photoURL ?? "/src/assets/avatar-placeholder.png"}
-                      alt={user.displayName ?? "User Avatar"}
-                      className="size-8 rounded-full bg-gray-800 outline -outline-offset-1 outline-white/10"
-                    />
+                    {getAvatarColor(avatarKey) ? (
+                      <div
+                        style={{ backgroundColor: getAvatarColor(avatarKey) }}
+                        className="size-8 rounded-full flex items-center justify-center outline -outline-offset-1 outline-white/10"
+                      >
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="rgba(255,255,255,0.9)">
+                          <path d="M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8v2.4h19.2v-2.4c0-3.2-6.4-4.8-9.6-4.8z" />
+                        </svg>
+                      </div>
+                    ) : (
+                      <img
+                        src={user.photoURL ?? "/src/assets/avatar-placeholder.png"}
+                        alt={user.displayName ?? "User Avatar"}
+                        className="size-8 rounded-full bg-gray-800 outline -outline-offset-1 outline-white/10"
+                      />
+                    )}
                     {pendingRequests > 0 && (
                       <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[9px] font-bold text-white ring-2 ring-[#1f3b4d]">
                         {pendingRequests > 9 ? "9+" : pendingRequests}
