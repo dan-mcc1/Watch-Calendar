@@ -69,22 +69,49 @@ export default function CalendarComponent({
     "Asia/Tokyo": "JST",
   };
 
-  function formatAirTime(
-    time: string | null | undefined,
-    timezone: string | null | undefined,
-  ): string | null {
-    if (!time) return null;
-    const [hourStr, minuteStr] = time.split(":");
-    const hour = parseInt(hourStr, 10);
-    const minute = parseInt(minuteStr, 10);
-    const period = hour >= 12 ? "PM" : "AM";
-    const h12 = hour % 12 || 12;
-    const timeStr =
-      minute > 0
-        ? `${h12}:${String(minute).padStart(2, "0")} ${period}`
-        : `${h12} ${period}`;
-    const tzAbbr = timezone ? TZ_ABBR[timezone] : null;
-    return tzAbbr ? `${timeStr} ${tzAbbr}` : timeStr;
+  // Converts 24-hour time in a given source timezone to user's local time
+  function formatAirTimeToLocal(
+    time24: string | null | undefined,
+    sourceTimeZone: string | null | undefined,
+  ) {
+    if (!time24 || !sourceTimeZone) return null;
+
+    // Split hours and minutes
+    const [hour, minute] = time24.split(":").map(Number);
+
+    // Use current date
+    const now = new Date();
+
+    // Build a formatted string in the source timezone
+    const sourceDateParts = new Intl.DateTimeFormat("en-US", {
+      timeZone: sourceTimeZone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    }).formatToParts(now);
+
+    // Extract parts
+    const year = sourceDateParts.find((p) => p.type === "year")?.value;
+    const month = sourceDateParts.find((p) => p.type === "month")?.value;
+    const day = sourceDateParts.find((p) => p.type === "day")?.value;
+
+    if (!year || !month || !day) return null;
+
+    // Create a date string in ISO format in the source timezone
+    const isoString = `${year}-${month}-${day}T${time24}:00`;
+
+    // Parse it as a Date object
+    const dateInSourceTZ = new Date(isoString);
+
+    // Convert to user local time automatically
+    return dateInSourceTZ.toLocaleTimeString(undefined, {
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+    });
   }
 
   const allItems: CalendarItem[] = [
@@ -430,12 +457,12 @@ export default function CalendarComponent({
                     )}
                   </div>
                   {item.type === "tv" &&
-                    formatAirTime(
+                    formatAirTimeToLocal(
                       item.showData.air_time,
                       item.showData.air_timezone,
                     ) && (
                       <div className="absolute bottom-0.5 right-1 z-10 hidden sm:block text-white/75 text-[7px] font-medium drop-shadow">
-                        {formatAirTime(
+                        {formatAirTimeToLocal(
                           item.showData.air_time,
                           item.showData.air_timezone,
                         )}

@@ -25,22 +25,37 @@ const TZ_ABBR: Record<string, string> = {
   "Asia/Tokyo": "JST",
 };
 
-function formatAirTime(
-  time: string | null | undefined,
-  timezone: string | null | undefined,
-): string | null {
-  if (!time) return null;
-  const [hourStr, minuteStr] = time.split(":");
-  const hour = parseInt(hourStr, 10);
-  const minute = parseInt(minuteStr, 10);
-  const period = hour >= 12 ? "PM" : "AM";
-  const h12 = hour % 12 || 12;
-  const timeStr =
-    minute > 0
-      ? `${h12}:${String(minute).padStart(2, "0")} ${period}`
-      : `${h12} ${period}`;
-  const tzAbbr = timezone ? TZ_ABBR[timezone] : null;
-  return tzAbbr ? `${timeStr} ${tzAbbr}` : timeStr;
+// Converts 24-hour time in a given source timezone to user's local time
+function formatAirTimeToLocal(
+  time24: string | null | undefined,
+  sourceTimeZone: string | null | undefined,
+) {
+  if (!time24 || !sourceTimeZone) return null; // nothing to display
+
+  const [hour, minute] = time24.split(":").map(Number);
+
+  // Create a Date in the source timezone
+  const now = new Date();
+
+  const sourceDateStr = new Intl.DateTimeFormat("en-US", {
+    timeZone: sourceTimeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(now);
+
+  const sourceDate = new Date(sourceDateStr);
+  sourceDate.setHours(hour, minute, 0, 0);
+
+  // Convert to user's local timezone automatically
+  return sourceDate.toLocaleTimeString(undefined, {
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
 }
 
 function airTimeToMinutes(time: string): number {
@@ -166,8 +181,12 @@ function ItemCard({ item, isWatched, token, onMarkWatched }: ItemCardProps) {
     try {
       const [h, m] = airTime.split(":").map(Number);
       const tz = airTimezone ?? "UTC";
-      const nowInTZ = new Date(new Date().toLocaleString("en-US", { timeZone: tz }));
-      const airInTZ = new Date(new Date().toLocaleString("en-US", { timeZone: tz }));
+      const nowInTZ = new Date(
+        new Date().toLocaleString("en-US", { timeZone: tz }),
+      );
+      const airInTZ = new Date(
+        new Date().toLocaleString("en-US", { timeZone: tz }),
+      );
       airInTZ.setHours(h, m, 0, 0);
       return nowInTZ >= airInTZ;
     } catch {
@@ -261,11 +280,35 @@ function ItemCard({ item, isWatched, token, onMarkWatched }: ItemCardProps) {
 
         {/* Watched button — TV episodes only */}
         {isTv && token && isReleased && (
-            <div className="mt-2">
-              {localWatched ? (
-                <span className="inline-flex items-center gap-1 text-xs text-green-400 font-medium">
+          <div className="mt-2">
+            {localWatched ? (
+              <span className="inline-flex items-center gap-1 text-xs text-green-400 font-medium">
+                <svg
+                  className="w-3.5 h-3.5"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={2.5}
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M5 13l4 4L19 7"
+                  />
+                </svg>
+                Watched
+              </span>
+            ) : (
+              <button
+                onClick={handleMarkWatched}
+                disabled={marking}
+                className="inline-flex items-center gap-1 bg-slate-700 hover:bg-purple-600 disabled:opacity-50 text-slate-300 hover:text-white text-xs font-medium px-2.5 py-1 rounded-md transition-colors"
+              >
+                {marking ? (
+                  <span className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin" />
+                ) : (
                   <svg
-                    className="w-3.5 h-3.5"
+                    className="w-3 h-3"
                     viewBox="0 0 24 24"
                     fill="none"
                     stroke="currentColor"
@@ -277,36 +320,12 @@ function ItemCard({ item, isWatched, token, onMarkWatched }: ItemCardProps) {
                       d="M5 13l4 4L19 7"
                     />
                   </svg>
-                  Watched
-                </span>
-              ) : (
-                <button
-                  onClick={handleMarkWatched}
-                  disabled={marking}
-                  className="inline-flex items-center gap-1 bg-slate-700 hover:bg-purple-600 disabled:opacity-50 text-slate-300 hover:text-white text-xs font-medium px-2.5 py-1 rounded-md transition-colors"
-                >
-                  {marking ? (
-                    <span className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin" />
-                  ) : (
-                    <svg
-                      className="w-3 h-3"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth={2.5}
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        d="M5 13l4 4L19 7"
-                      />
-                    </svg>
-                  )}
-                  {marking ? "Saving…" : "Mark Watched"}
-                </button>
-              )}
-            </div>
-          )}
+                )}
+                {marking ? "Saving…" : "Mark Watched"}
+              </button>
+            )}
+          </div>
+        )}
       </div>
     </Link>
   );
@@ -344,8 +363,10 @@ export default function DayScheduleView({
   for (const item of timedItems) {
     const label =
       item.type === "tv"
-        ? (formatAirTime(item.showData.air_time, item.showData.air_timezone) ??
-          "")
+        ? (formatAirTimeToLocal(
+            item.showData.air_time,
+            item.showData.air_timezone,
+          ) ?? "")
         : "";
     const existing = timedGroups.find((g) => g.label === label);
     if (existing) existing.items.push(item);
