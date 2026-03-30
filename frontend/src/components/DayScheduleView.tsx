@@ -241,6 +241,11 @@ export default function DayScheduleView({ items, watchedEpisodeKeys, token, onMa
     else timedGroups.push({ label, items: [item] });
   }
 
+  function itemKey(item: CalendarItem): string {
+    if (item.type === "tv") return `tv_${item.showData.id}_${item.season_number}_${item.episode_number}`;
+    return `movie_${item.showData.id}`;
+  }
+
   function isWatched(item: CalendarItem): boolean {
     if (item.type !== "tv" || !watchedEpisodeKeys) return false;
     return watchedEpisodeKeys.has(
@@ -252,9 +257,9 @@ export default function DayScheduleView({ items, watchedEpisodeKeys, token, onMa
     <div className="flex flex-col gap-6">
       {allDayItems.length > 0 && (
         <div className="flex flex-col gap-3">
-          {allDayItems.map((item, idx) => (
+          {allDayItems.map((item) => (
             <ItemCard
-              key={idx}
+              key={itemKey(item)}
               item={item}
               isWatched={isWatched(item)}
               token={token}
@@ -271,9 +276,9 @@ export default function DayScheduleView({ items, watchedEpisodeKeys, token, onMa
             <div className="flex-1 h-px bg-slate-700" />
           </div>
           <div className="flex flex-col gap-3">
-            {groupItems.map((item, idx) => (
+            {groupItems.map((item) => (
               <ItemCard
-                key={idx}
+                key={itemKey(item)}
                 item={item}
                 isWatched={isWatched(item)}
                 token={token}

@@ -200,8 +200,8 @@ export default function MovieInfo() {
           {year && <StatBox label="Year" value={year} />}
           {movie.runtime > 0 && <StatBox label="Runtime" value={formatRuntime(movie.runtime)} />}
           <StatBox label="Status" value={movie.status} />
-          {movie.budget > 0 && <StatBox label="Budget" value={`$${(movie.budget / 1_000_000).toFixed(0)}M`} />}
-          {movie.revenue > 0 && <StatBox label="Revenue" value={`$${(movie.revenue / 1_000_000).toFixed(0)}M`} />}
+          {movie.budget > 0 && <StatBox label="Budget" value={movie.budget >= 1_000_000_000 ? `$${(movie.budget / 1_000_000_000).toFixed(2)}B` : `$${(movie.budget / 1_000_000).toFixed(0)}M`} />}
+          {movie.revenue > 0 && <StatBox label="Revenue" value={movie.revenue >= 1_000_000_000 ? `$${(movie.revenue / 1_000_000_000).toFixed(2)}B` : `$${(movie.revenue / 1_000_000).toFixed(0)}M`} />}
         </div>
 
         {/* Created by */}

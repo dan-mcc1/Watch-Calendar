@@ -11,7 +11,7 @@ class User(Base):
     email = Column(String, nullable=True)
     username = Column(String, unique=True, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-    email_notifications = Column(Boolean, default=True, nullable=False, server_default="true")
+    email_notifications = Column(Boolean, default=False, nullable=False, server_default="false")
     notification_frequency = Column(String, default="daily", nullable=False, server_default="daily")
     profile_visibility = Column(String, default="friends_only", nullable=False, server_default="friends_only")
     avatar_key = Column(String, nullable=True)
