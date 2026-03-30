@@ -11,6 +11,12 @@ interface NextEpisode {
   name?: string | null;
   still_path?: string | null;
   overview?: string | null;
+  air_date?: string | null;
+}
+
+function formatAirDate(dateStr: string): string {
+  const d = new Date(dateStr + "T00:00:00");
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
 interface ShowCardProps {
@@ -60,17 +66,22 @@ function ShowCard({ show, token, onEpisodeWatched }: ShowCardProps) {
     }
   }
 
+  const isUnreleased =
+    next && !next.finished && next.air_date
+      ? new Date(next.air_date + "T00:00:00") > new Date()
+      : false;
+
   const episodeUrl =
-    next && !next.finished
+    next && !next.finished && !isUnreleased
       ? `/tv/${show.id}/episode/${next.season_number}/${next.episode_number}`
       : null;
 
   return (
     <div
       onClick={() => episodeUrl && navigate(episodeUrl)}
-      className={`flex-shrink-0 w-72 bg-slate-700/50 rounded-xl overflow-hidden border border-slate-600/50 ${episodeUrl ? "cursor-pointer hover:border-slate-500 transition-colors" : ""}`}
+      className={`flex-shrink-0 w-72 flex flex-col bg-slate-700/50 rounded-xl overflow-hidden border border-slate-600/50 ${episodeUrl ? "cursor-pointer hover:border-slate-500 transition-colors" : ""}`}
     >
-      <div className="flex gap-3 p-3">
+      <div className="flex gap-3 p-3 flex-1">
         {/* Poster — links to show, not episode */}
         <Link
           to={`/tv/${show.id}`}
@@ -119,7 +130,7 @@ function ShowCard({ show, token, onEpisodeWatched }: ShowCardProps) {
             )}
 
             {next && !next.finished && (
-              <p className="text-xs text-slate-400 mt-0.5">
+              <p className="text-xs text-slate-400 mt-0.5 line-clamp-1">
                 <span className="text-purple-300 font-medium">
                   S{next.season_number}E{next.episode_number}
                 </span>
@@ -131,47 +142,48 @@ function ShowCard({ show, token, onEpisodeWatched }: ShowCardProps) {
           </div>
 
           {next && !next.finished && (
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                markWatched();
-              }}
-              disabled={marking}
-              className="mt-2 self-start inline-flex items-center gap-1.5 bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white text-xs font-medium px-2.5 py-1 rounded-md transition-colors"
-            >
-              {marking ? (
-                <span className="w-3 h-3 border border-white/50 border-t-white rounded-full animate-spin" />
-              ) : (
-                <svg
-                  className="w-3 h-3"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth={2.5}
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M5 13l4 4L19 7"
-                  />
+            isUnreleased ? (
+              <span className="mt-2 self-start inline-flex items-center gap-1 text-xs text-slate-400 bg-slate-600/50 border border-slate-600 px-2.5 py-1 rounded-md">
+                <svg className="w-3 h-3 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                 </svg>
-              )}
-              {marking ? "Saving…" : "Mark Watched"}
-            </button>
+                Airs {next.air_date ? formatAirDate(next.air_date) : "soon"}
+              </span>
+            ) : (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  markWatched();
+                }}
+                disabled={marking}
+                className="mt-2 self-start inline-flex items-center gap-1.5 bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white text-xs font-medium px-2.5 py-1 rounded-md transition-colors"
+              >
+                {marking ? (
+                  <span className="w-3 h-3 border border-white/50 border-t-white rounded-full animate-spin" />
+                ) : (
+                  <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                  </svg>
+                )}
+                {marking ? "Saving…" : "Mark Watched"}
+              </button>
+            )
           )}
         </div>
       </div>
 
-      {/* Episode still image */}
-      {next && !next.finished && next.still_path && (
-        <div className="aspect-video w-full overflow-hidden">
-          <img
-            src={`${BASE_IMAGE_URL}/w300${next.still_path}`}
-            alt={next.name ?? "Episode"}
-            className="w-full h-full object-cover opacity-60"
-          />
-        </div>
-      )}
+      {/* Episode still — falls back to show backdrop then poster */}
+      {next &&
+        !next.finished &&
+        (next.still_path ?? show.backdrop_path ?? show.poster_path) && (
+          <div className="aspect-video w-full overflow-hidden">
+            <img
+              src={`${BASE_IMAGE_URL}/w300${next.still_path ?? show.backdrop_path ?? show.poster_path}`}
+              alt={next.name ?? show.name}
+              className="w-full aspect-video object-cover opacity-60"
+            />
+          </div>
+        )}
     </div>
   );
 }
