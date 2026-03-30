@@ -15,12 +15,17 @@ def send_email(to_email: str, subject: str, html_body: str):
     msg["To"] = to_email
     msg.attach(MIMEText(html_body, "html"))
 
-    with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=15) as server:
-        server.ehlo()
-        if settings.SMTP_USE_TLS:
-            server.starttls()
-        server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
-        server.sendmail(msg["From"], to_email, msg.as_string())
+    try:
+        with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=15) as server:
+            server.ehlo()
+            if settings.SMTP_USE_TLS:
+                server.starttls()
+            server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
+            server.sendmail(msg["From"], to_email, msg.as_string())
+    except OSError as e:
+        print(f"[email_service] Network error sending to {to_email}: {e}")
+    except smtplib.SMTPException as e:
+        print(f"[email_service] SMTP error sending to {to_email}: {e}")
 
 
 _TZ_ABBR = {
