@@ -29,6 +29,7 @@ export type Show = {
   air_timezone?: string | null;
   bg_color?: string;
   popularity?: number;
+  vote_average?: number;
   user_rating?: number | null;
 }
 
@@ -86,6 +87,7 @@ export type Movie = {
 
   bg_color?: string;
   popularity?: number;
+  vote_average?: number;
   isWatched?: boolean;
   user_rating?: number | null;
 }

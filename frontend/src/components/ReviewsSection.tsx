@@ -1,0 +1,258 @@
+import { useState, useEffect } from "react";
+import type { User } from "firebase/auth";
+import { API_URL } from "../constants";
+
+interface Review {
+  id: number;
+  user_id: string;
+  username: string;
+  review_text: string;
+  rating: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+function MiniStars({ rating }: { rating: number }) {
+  return (
+    <span className="flex items-center gap-0.5">
+      {[1, 2, 3, 4, 5].map((s) => (
+        <svg
+          key={s}
+          className={`w-3 h-3 ${s <= rating ? "text-yellow-400" : "text-slate-600"}`}
+          viewBox="0 0 24 24"
+          fill={s <= rating ? "currentColor" : "none"}
+          stroke="currentColor"
+          strokeWidth={s <= rating ? 0 : 1.5}
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            d="M11.48 3.499a.562.562 0 011.04 0l2.125 5.111a.563.563 0 00.475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 00-.182.557l1.285 5.385a.562.562 0 01-.84.61l-4.725-2.885a.563.563 0 00-.586 0L6.982 20.54a.562.562 0 01-.84-.61l1.285-5.386a.562.562 0 00-.182-.557l-4.204-3.602a.563.563 0 01.321-.988l5.518-.442a.563.563 0 00.475-.345L11.48 3.5z"
+          />
+        </svg>
+      ))}
+    </span>
+  );
+}
+
+interface Props {
+  contentType: "movie" | "tv";
+  contentId: number;
+  user: User | null;
+}
+
+function timeAgo(dateStr: string): string {
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `${days}d ago`;
+  const months = Math.floor(days / 30);
+  if (months < 12) return `${months}mo ago`;
+  return `${Math.floor(months / 12)}y ago`;
+}
+
+export default function ReviewsSection({ contentType, contentId, user }: Props) {
+  const [reviews, setReviews] = useState<Review[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [draft, setDraft] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [editing, setEditing] = useState(false);
+
+  const myReview = user
+    ? reviews.find((r) => r.user_id === user.uid) ?? null
+    : null;
+
+  useEffect(() => {
+    setLoading(true);
+    fetch(`${API_URL}/reviews?content_type=${contentType}&content_id=${contentId}`)
+      .then((r) => r.json())
+      .then((data) => {
+        setReviews(Array.isArray(data) ? data : []);
+      })
+      .catch(() => setReviews([]))
+      .finally(() => setLoading(false));
+  }, [contentType, contentId]);
+
+  // Pre-fill draft when editing
+  useEffect(() => {
+    if (editing && myReview) setDraft(myReview.review_text);
+    if (!editing) setDraft("");
+  }, [editing, myReview]);
+
+  async function submitReview() {
+    if (!user || !draft.trim()) return;
+    setSaving(true);
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch(`${API_URL}/reviews`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          content_type: contentType,
+          content_id: contentId,
+          review_text: draft.trim(),
+        }),
+      });
+      if (res.ok) {
+        const saved: Review = await res.json();
+        setReviews((prev) => {
+          const without = prev.filter((r) => r.user_id !== user.uid);
+          return [saved, ...without];
+        });
+        setEditing(false);
+        setDraft("");
+      }
+    } catch {
+      // ignore
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function deleteReview() {
+    if (!user || !myReview) return;
+    setDeleting(true);
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch(`${API_URL}/reviews`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ content_type: contentType, content_id: contentId }),
+      });
+      if (res.ok) {
+        setReviews((prev) => prev.filter((r) => r.user_id !== user.uid));
+        setEditing(false);
+        setDraft("");
+      }
+    } catch {
+      // ignore
+    } finally {
+      setDeleting(false);
+    }
+  }
+
+  const othersReviews = reviews.filter((r) => r.user_id !== user?.uid);
+
+  return (
+    <div>
+      <h2 className="text-slate-400 text-xs uppercase tracking-wider font-semibold mb-4">
+        Reviews {reviews.length > 0 && <span className="text-slate-600 normal-case tracking-normal">({reviews.length})</span>}
+      </h2>
+
+      {/* Write / edit review */}
+      {user && (
+        <div className="mb-6">
+          {!myReview && !editing ? (
+            <button
+              onClick={() => setEditing(true)}
+              className="text-sm text-purple-400 hover:text-purple-300 transition-colors flex items-center gap-1.5"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536M9 13l6.586-6.586a2 2 0 112.828 2.828L11.828 15.828a2 2 0 01-1.414.586H9v-2a2 2 0 01.586-1.414z" />
+              </svg>
+              Write a review
+            </button>
+          ) : myReview && !editing ? (
+            /* Existing review — show it with edit/delete controls */
+            <div className="bg-slate-800/80 border border-purple-500/30 rounded-xl p-4">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <div className="w-6 h-6 rounded-full bg-purple-700 flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0">
+                    {myReview.username[0]?.toUpperCase()}
+                  </div>
+                  <span className="text-sm font-medium text-purple-300">@{myReview.username}</span>
+                  {myReview.rating != null && <MiniStars rating={myReview.rating} />}
+                  <span className="text-xs text-slate-500">{timeAgo(myReview.updated_at ?? myReview.created_at)}</span>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setEditing(true)}
+                    className="text-xs text-slate-400 hover:text-slate-200 transition-colors px-2 py-1 rounded"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    onClick={deleteReview}
+                    disabled={deleting}
+                    className="text-xs text-red-400 hover:text-red-300 disabled:opacity-50 transition-colors px-2 py-1 rounded"
+                  >
+                    {deleting ? "Deleting…" : "Delete"}
+                  </button>
+                </div>
+              </div>
+              <p className="text-slate-300 text-sm leading-relaxed whitespace-pre-wrap">{myReview.review_text}</p>
+            </div>
+          ) : (
+            /* Text editor */
+            <div>
+              <textarea
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                placeholder="Share your thoughts…"
+                maxLength={2000}
+                rows={4}
+                className="w-full bg-slate-800 border border-slate-600 focus:border-purple-500 rounded-xl px-4 py-3 text-slate-200 text-sm placeholder-slate-500 focus:outline-none resize-none transition-colors"
+              />
+              <div className="flex items-center justify-between mt-2">
+                <span className="text-xs text-slate-600">{draft.length}/2000</span>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => { setEditing(false); setDraft(""); }}
+                    className="text-sm text-slate-400 hover:text-slate-200 px-3 py-1.5 rounded-lg transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={submitReview}
+                    disabled={saving || !draft.trim()}
+                    className="text-sm bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white px-4 py-1.5 rounded-lg transition-colors font-medium"
+                  >
+                    {saving ? "Saving…" : myReview ? "Update" : "Post"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Other reviews */}
+      {loading ? (
+        <div className="space-y-3">
+          {[1, 2].map((i) => (
+            <div key={i} className="h-20 rounded-xl bg-slate-800 animate-pulse" />
+          ))}
+        </div>
+      ) : othersReviews.length === 0 && !myReview ? (
+        <p className="text-slate-500 text-sm">No reviews yet. Be the first!</p>
+      ) : (
+        <div className="space-y-3">
+          {othersReviews.map((review) => (
+            <div key={review.id} className="bg-slate-800/60 border border-slate-700 rounded-xl p-4">
+              <div className="flex items-center gap-2 mb-2 flex-wrap">
+                <div className="w-6 h-6 rounded-full bg-slate-600 flex items-center justify-center text-[10px] font-bold text-slate-300 flex-shrink-0">
+                  {review.username[0]?.toUpperCase()}
+                </div>
+                <span className="text-sm font-medium text-slate-300">@{review.username}</span>
+                {review.rating != null && <MiniStars rating={review.rating} />}
+                <span className="text-xs text-slate-600">{timeAgo(review.updated_at ?? review.created_at)}</span>
+              </div>
+              <p className="text-slate-400 text-sm leading-relaxed whitespace-pre-wrap">{review.review_text}</p>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}

@@ -1,8 +1,11 @@
+from datetime import datetime, timedelta, timezone
 from sqlalchemy.orm import Session
 from fastapi import HTTPException
 from app.models.recommendation import Recommendation
 from app.models.user import User
 from app.services.friends_service import are_friends
+
+_REC_TTL_DAYS = 7
 
 
 def send_recommendation(
@@ -73,10 +76,14 @@ def _serialize(rec: Recommendation, sender_username: str) -> dict:
 
 
 def get_inbox(db: Session, user_id: str) -> list:
+    cutoff = datetime.now(timezone.utc) - timedelta(days=_REC_TTL_DAYS)
     rows = (
         db.query(Recommendation, User.username)
         .join(User, User.id == Recommendation.sender_id)
-        .filter(Recommendation.recipient_id == user_id)
+        .filter(
+            Recommendation.recipient_id == user_id,
+            Recommendation.created_at >= cutoff,
+        )
         .order_by(Recommendation.created_at.desc())
         .all()
     )
@@ -96,9 +103,25 @@ def mark_read(db: Session, user_id: str, recommendation_id: int):
     return {"message": "Marked as read"}
 
 
+def delete_old_recommendations(db: Session) -> int:
+    cutoff = datetime.now(timezone.utc) - timedelta(days=_REC_TTL_DAYS)
+    deleted = (
+        db.query(Recommendation)
+        .filter(Recommendation.created_at < cutoff)
+        .delete()
+    )
+    db.commit()
+    return deleted
+
+
 def get_unread_count(db: Session, user_id: str) -> int:
+    cutoff = datetime.now(timezone.utc) - timedelta(days=_REC_TTL_DAYS)
     return (
         db.query(Recommendation)
-        .filter_by(recipient_id=user_id, is_read=False)
+        .filter(
+            Recommendation.recipient_id == user_id,
+            Recommendation.is_read == False,  # noqa: E712
+            Recommendation.created_at >= cutoff,
+        )
         .count()
     )

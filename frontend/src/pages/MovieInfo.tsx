@@ -11,10 +11,13 @@ import { firebaseApp } from "../firebase";
 import WatchButton from "../components/WatchButton";
 import FavoriteButton from "../components/FavoriteButton";
 import RecommendButton from "../components/RecommendButton";
+import ReviewsSection from "../components/ReviewsSection";
 import { onAuthStateChanged } from "firebase/auth";
 import { usePageTitle } from "../hooks/usePageTitle";
 
 type FullMovieData = Movie & {
+  vote_average?: number;
+  vote_count?: number;
   created_by: {
     id: number;
     credit_id: string;
@@ -38,15 +41,67 @@ type FullMovieData = Movie & {
     twitter_id: string;
   };
   recommendations: { results: Movie[] };
-  videos: { results: { id: string; key: string; site: string; type: string; official: boolean }[] };
+  videos: {
+    results: {
+      id: string;
+      key: string;
+      site: string;
+      type: string;
+      official: boolean;
+    }[];
+  };
 };
 
-function StatBox({ label, value }: { label: string; value: string | number | null | undefined }) {
+interface ExternalScores {
+  imdb?: string;
+  rotten_tomatoes?: string;
+  metacritic?: string;
+}
+
+interface AggregateRating {
+  average: number | null;
+  count: number;
+}
+
+function RatingBadge({
+  label,
+  value,
+  color,
+}: {
+  label: string;
+  value: string;
+  color: string;
+}) {
+  return (
+    <div
+      className={`flex flex-col items-center bg-slate-800 border rounded-xl px-4 py-3 min-w-[80px] ${color}`}
+    >
+      <span className="text-slate-100 font-bold text-lg leading-tight">
+        {value}
+      </span>
+      <span className="text-slate-500 text-xs mt-0.5 whitespace-nowrap">
+        {label}
+      </span>
+    </div>
+  );
+}
+
+function StatBox({
+  label,
+  value,
+}: {
+  label: string;
+  value: string | number | null | undefined;
+}) {
   if (!value && value !== 0) return null;
   return (
     <div className="flex flex-col items-center bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 min-w-[80px]">
-      <span className="text-slate-100 font-bold text-lg leading-tight">{value}</span>
-      <span className="text-slate-500 text-xs mt-0.5 whitespace-nowrap">{label}</span>
+      <span className="text-slate-100 font-bold text-lg leading-tight">
+        {value}
+      </span>
+      <span className="text-slate-500 text-xs mt-0.5 whitespace-nowrap">
+        {label}
+      </span>
     </div>
   );
 }
@@ -67,7 +122,9 @@ function ExternalLink({ href, label }: { href: string; label: string }) {
 function formatRuntime(minutes: number) {
   const h = Math.floor(minutes / 60);
   const m = minutes % 60;
-  return [h > 0 ? `${h}h` : null, m > 0 ? `${m}m` : null].filter(Boolean).join(" ");
+  return [h > 0 ? `${h}h` : null, m > 0 ? `${m}m` : null]
+    .filter(Boolean)
+    .join(" ");
 }
 
 export default function MovieInfo() {
@@ -78,6 +135,10 @@ export default function MovieInfo() {
   usePageTitle(movie?.title);
   const auth = getAuth(firebaseApp);
   const [user, setUser] = useState(auth.currentUser);
+  const [externalScores, setExternalScores] = useState<ExternalScores | null>(
+    null,
+  );
+  const [aggRating, setAggRating] = useState<AggregateRating | null>(null);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (u) => {
@@ -95,11 +156,34 @@ export default function MovieInfo() {
         const rawData = await res.json();
         let data: FullMovieData;
         if (rawData["watch/providers"]?.["results"]?.["US"]) {
-          data = { ...rawData, providers: rawData["watch/providers"]["results"]["US"] };
+          data = {
+            ...rawData,
+            providers: rawData["watch/providers"]["results"]["US"],
+          };
         } else {
           data = rawData;
         }
         setMovie(data);
+        // Fetch aggregate ratings
+        fetch(
+          `${API_URL}/reviews/aggregate?content_type=movie&content_id=${id}`,
+        )
+          .then((r) => r.json())
+          .then(setAggRating)
+          .catch(() => {});
+        // Fetch RT/Metacritic via OMDB if we have an imdb_id
+        const imdbId = data.external_ids?.imdb_id;
+        if (imdbId) {
+          fetch(
+            `${API_URL}/reviews/external-scores?imdb_id=${encodeURIComponent(imdbId)}`,
+          )
+            .then((r) => r.json())
+            .then(
+              (scores) =>
+                Object.keys(scores).length > 0 && setExternalScores(scores),
+            )
+            .catch(() => {});
+        }
       } catch (err: any) {
         setError(err.message || "Something went wrong");
       } finally {
@@ -109,21 +193,25 @@ export default function MovieInfo() {
     getData();
   }, [id]);
 
-  if (loading) return (
-    <div className="flex items-center justify-center min-h-64">
-      <div className="flex flex-col items-center gap-3">
-        <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
-        <p className="text-slate-400 text-sm">Loading movie info…</p>
+  if (loading)
+    return (
+      <div className="flex items-center justify-center min-h-64">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+          <p className="text-slate-400 text-sm">Loading movie info…</p>
+        </div>
       </div>
-    </div>
-  );
+    );
   if (error) return <p className="text-red-400 p-6">{error}</p>;
   if (!movie) return <p className="text-slate-400 p-6">Movie not found.</p>;
 
-  const year = movie.release_date ? parseLocalDate(movie.release_date).getFullYear() : null;
-  const trailer = movie.videos?.results?.find(
-    (v) => v.type === "Trailer" && v.site === "YouTube"
-  ) ?? movie.videos?.results?.find((v) => v.site === "YouTube");
+  const year = movie.release_date
+    ? parseLocalDate(movie.release_date).getFullYear()
+    : null;
+  const trailer =
+    movie.videos?.results?.find(
+      (v) => v.type === "Trailer" && v.site === "YouTube",
+    ) ?? movie.videos?.results?.find((v) => v.site === "YouTube");
 
   return (
     <div className="max-w-5xl mx-auto pb-16">
@@ -158,10 +246,14 @@ export default function MovieInfo() {
                 className="max-h-16 max-w-[280px] object-contain drop-shadow-2xl mb-1"
               />
             ) : (
-              <h1 className="text-3xl md:text-4xl font-bold text-white drop-shadow-lg">{movie.title}</h1>
+              <h1 className="text-3xl md:text-4xl font-bold text-white drop-shadow-lg">
+                {movie.title}
+              </h1>
             )}
             {movie.tagline && (
-              <p className="text-slate-300 italic text-sm mt-1">{movie.tagline}</p>
+              <p className="text-slate-300 italic text-sm mt-1">
+                {movie.tagline}
+              </p>
             )}
           </div>
         </div>
@@ -169,12 +261,18 @@ export default function MovieInfo() {
 
       {/* ── CONTENT ── */}
       <div className="px-4 sm:px-6 mt-6 space-y-8">
-
         {/* Genres + watch button + trailer */}
         <div className="flex flex-wrap items-center gap-3">
           {user && <WatchButton contentType="movie" contentId={movie.id} />}
           {user && <FavoriteButton contentType="movie" contentId={movie.id} />}
-          {user && <RecommendButton contentType="movie" contentId={movie.id} contentTitle={movie.title} contentPosterPath={movie.poster_path ?? null} />}
+          {user && (
+            <RecommendButton
+              contentType="movie"
+              contentId={movie.id}
+              contentTitle={movie.title}
+              contentPosterPath={movie.poster_path ?? null}
+            />
+          )}
           {trailer && (
             <a
               href={`https://www.youtube.com/watch?v=${trailer.key}`}
@@ -182,14 +280,22 @@ export default function MovieInfo() {
               rel="noopener noreferrer"
               className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-red-600 hover:bg-red-500 text-white text-sm font-semibold transition-colors"
             >
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                fill="currentColor"
+                className="w-4 h-4"
+              >
                 <path d="M8 5v14l11-7z" />
               </svg>
               Watch Trailer
             </a>
           )}
           {movie.genres?.map((genre) => (
-            <span key={genre.id} className="px-3 py-1 text-sm rounded-full bg-slate-700/60 border border-slate-600 text-slate-300">
+            <span
+              key={genre.id}
+              className="px-3 py-1 text-sm rounded-full bg-slate-700/60 border border-slate-600 text-slate-300"
+            >
               {genre.name}
             </span>
           ))}
@@ -198,11 +304,85 @@ export default function MovieInfo() {
         {/* Stat boxes */}
         <div className="flex flex-wrap gap-3">
           {year && <StatBox label="Year" value={year} />}
-          {movie.runtime > 0 && <StatBox label="Runtime" value={formatRuntime(movie.runtime)} />}
+          {movie.runtime > 0 && (
+            <StatBox label="Runtime" value={formatRuntime(movie.runtime)} />
+          )}
           <StatBox label="Status" value={movie.status} />
-          {movie.budget > 0 && <StatBox label="Budget" value={movie.budget >= 1_000_000_000 ? `$${(movie.budget / 1_000_000_000).toFixed(2)}B` : `$${(movie.budget / 1_000_000).toFixed(0)}M`} />}
-          {movie.revenue > 0 && <StatBox label="Revenue" value={movie.revenue >= 1_000_000_000 ? `$${(movie.revenue / 1_000_000_000).toFixed(2)}B` : `$${(movie.revenue / 1_000_000).toFixed(0)}M`} />}
+          {movie.budget > 0 && (
+            <StatBox
+              label="Budget"
+              value={
+                movie.budget >= 1_000_000_000
+                  ? `$${(movie.budget / 1_000_000_000).toFixed(2)}B`
+                  : `$${(movie.budget / 1_000_000).toFixed(0)}M`
+              }
+            />
+          )}
+          {movie.revenue > 0 && (
+            <StatBox
+              label="Revenue"
+              value={
+                movie.revenue >= 1_000_000_000
+                  ? `$${(movie.revenue / 1_000_000_000).toFixed(2)}B`
+                  : `$${(movie.revenue / 1_000_000).toFixed(0)}M`
+              }
+            />
+          )}
         </div>
+
+        {/* Ratings row */}
+        {(movie.vote_average || externalScores || aggRating?.average) && (
+          <div>
+            <h2 className="text-slate-400 text-xs uppercase tracking-wider font-semibold mb-3">
+              Ratings
+            </h2>
+            <div className="flex flex-wrap gap-3">
+              {movie.vote_average != null && movie.vote_average > 0 && (
+                <RatingBadge
+                  label="TMDb"
+                  value={`${movie.vote_average.toFixed(1)}/10`}
+                  color="border-2 border-blue-800"
+                />
+              )}
+              {externalScores?.imdb && (
+                <RatingBadge
+                  label="IMDB"
+                  value={externalScores.imdb}
+                  color={
+                    parseInt(externalScores.imdb) >= 6.0
+                      ? "border-2 border-green-800"
+                      : "border-2 border-red-800"
+                  }
+                />
+              )}
+              {externalScores?.rotten_tomatoes && (
+                <RatingBadge
+                  label="Rotten Tomatoes"
+                  value={externalScores.rotten_tomatoes}
+                  color={
+                    parseInt(externalScores.rotten_tomatoes) >= 60
+                      ? "border-2 border-green-800"
+                      : "border-2 border-red-800"
+                  }
+                />
+              )}
+              {externalScores?.metacritic && (
+                <RatingBadge
+                  label="Metacritic"
+                  value={externalScores.metacritic.replace("/100", "")}
+                  color="border-2 border-yellow-800/50"
+                />
+              )}
+              {aggRating?.average && (
+                <RatingBadge
+                  label={`Users (${aggRating.count})`}
+                  value={`${aggRating.average}/5 ★`}
+                  color="border-2 border-purple-800"
+                />
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Created by */}
         {movie.created_by && movie.created_by.length > 0 && (
@@ -217,7 +397,9 @@ export default function MovieInfo() {
         {/* Overview */}
         {movie.overview && (
           <div>
-            <h2 className="text-slate-400 text-xs uppercase tracking-wider font-semibold mb-2">Overview</h2>
+            <h2 className="text-slate-400 text-xs uppercase tracking-wider font-semibold mb-2">
+              Overview
+            </h2>
             <p className="text-slate-300 leading-relaxed">{movie.overview}</p>
           </div>
         )}
@@ -226,16 +408,29 @@ export default function MovieInfo() {
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-sm">
           {movie.release_date && (
             <div>
-              <div className="text-slate-500 text-xs uppercase tracking-wide mb-0.5">Release Date</div>
+              <div className="text-slate-500 text-xs uppercase tracking-wide mb-0.5">
+                Release Date
+              </div>
               <div className="text-slate-200">
-                {formatLocalDate(movie.release_date, { year: "numeric", month: "long", day: "numeric" })}
+                {formatLocalDate(movie.release_date, {
+                  year: "numeric",
+                  month: "long",
+                  day: "numeric",
+                })}
               </div>
             </div>
           )}
           {movie.homepage && (
             <div>
-              <div className="text-slate-500 text-xs uppercase tracking-wide mb-0.5">Homepage</div>
-              <a href={movie.homepage} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline">
+              <div className="text-slate-500 text-xs uppercase tracking-wide mb-0.5">
+                Homepage
+              </div>
+              <a
+                href={movie.homepage}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-blue-400 hover:underline"
+              >
                 Official Site
               </a>
             </div>
@@ -246,27 +441,66 @@ export default function MovieInfo() {
         {movie.providers && <WhereToWatch providers={movie.providers} />}
 
         {/* Cast */}
-        {movie.credits?.cast.length > 0 && <CastBar cast={movie.credits.cast} />}
+        {movie.credits?.cast.length > 0 && (
+          <CastBar cast={movie.credits.cast} />
+        )}
 
         {/* External Links */}
         {movie.external_ids && (
           <div>
-            <h2 className="text-slate-400 text-xs uppercase tracking-wider font-semibold mb-3">External Links</h2>
+            <h2 className="text-slate-400 text-xs uppercase tracking-wider font-semibold mb-3">
+              External Links
+            </h2>
             <div className="flex flex-wrap gap-2">
-              {movie.external_ids.imdb_id && <ExternalLink href={`https://www.imdb.com/title/${movie.external_ids.imdb_id}`} label="IMDb" />}
-              {movie.external_ids.tvdb_id && <ExternalLink href={`https://www.thetvdb.com/?id=${movie.external_ids.tvdb_id}`} label="TVDB" />}
-              {movie.external_ids.wikidata_id && <ExternalLink href={`https://www.wikidata.org/wiki/${movie.external_ids.wikidata_id}`} label="Wikidata" />}
-              {movie.external_ids.facebook_id && <ExternalLink href={`https://www.facebook.com/${movie.external_ids.facebook_id}`} label="Facebook" />}
-              {movie.external_ids.instagram_id && <ExternalLink href={`https://www.instagram.com/${movie.external_ids.instagram_id}`} label="Instagram" />}
-              {movie.external_ids.twitter_id && <ExternalLink href={`https://twitter.com/${movie.external_ids.twitter_id}`} label="Twitter / X" />}
+              {movie.external_ids.imdb_id && (
+                <ExternalLink
+                  href={`https://www.imdb.com/title/${movie.external_ids.imdb_id}`}
+                  label="IMDb"
+                />
+              )}
+              {movie.external_ids.tvdb_id && (
+                <ExternalLink
+                  href={`https://www.thetvdb.com/?id=${movie.external_ids.tvdb_id}`}
+                  label="TVDB"
+                />
+              )}
+              {movie.external_ids.wikidata_id && (
+                <ExternalLink
+                  href={`https://www.wikidata.org/wiki/${movie.external_ids.wikidata_id}`}
+                  label="Wikidata"
+                />
+              )}
+              {movie.external_ids.facebook_id && (
+                <ExternalLink
+                  href={`https://www.facebook.com/${movie.external_ids.facebook_id}`}
+                  label="Facebook"
+                />
+              )}
+              {movie.external_ids.instagram_id && (
+                <ExternalLink
+                  href={`https://www.instagram.com/${movie.external_ids.instagram_id}`}
+                  label="Instagram"
+                />
+              )}
+              {movie.external_ids.twitter_id && (
+                <ExternalLink
+                  href={`https://twitter.com/${movie.external_ids.twitter_id}`}
+                  label="Twitter / X"
+                />
+              )}
             </div>
           </div>
         )}
 
+        {/* Reviews */}
+        <ReviewsSection contentType="movie" contentId={movie.id} user={user} />
+
         {/* Recommendations */}
         {movie.recommendations?.results.length > 0 && (
           <div>
-            <h2 className="text-xl font-semibold text-slate-100 mb-4">You Might Also Like</h2>
+            <h2 className="text-xl font-semibold text-slate-100 mb-4">
+              You Might Also Like
+            </h2>
             <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3">
               {movie.recommendations.results.slice(0, 12).map((rec) => (
                 <Link key={rec.id} to={`/movie/${rec.id}`} className="group">
@@ -278,10 +512,14 @@ export default function MovieInfo() {
                     />
                   ) : (
                     <div className="w-full aspect-[2/3] bg-slate-800 border border-slate-700 rounded-lg flex items-center justify-center">
-                      <span className="text-slate-500 text-xs text-center px-1">{rec.title}</span>
+                      <span className="text-slate-500 text-xs text-center px-1">
+                        {rec.title}
+                      </span>
                     </div>
                   )}
-                  <p className="text-xs mt-1.5 text-slate-400 group-hover:text-slate-200 transition-colors text-center line-clamp-1">{rec.title}</p>
+                  <p className="text-xs mt-1.5 text-slate-400 group-hover:text-slate-200 transition-colors text-center line-clamp-1">
+                    {rec.title}
+                  </p>
                 </Link>
               ))}
             </div>

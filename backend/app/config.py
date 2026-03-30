@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     SMTP_FROM: str = ""
     SMTP_USE_TLS: bool = True
     ICAL_SECRET: str = "change-me-to-a-random-secret"
+    OMDB_API_KEY: str = ""  # Free key from https://www.omdbapi.com/ (for RT/Metacritic scores)
 
     model_config = SettingsConfigDict(
         env_file=".env",

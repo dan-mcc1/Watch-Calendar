@@ -19,21 +19,27 @@ from app.routers import (
     favorites,
     recommendations,
     events,
+    reviews,
 )
 from fastapi.middleware.cors import CORSMiddleware
-from app.db.session import SessionLocal
+from app.db.session import SessionLocal, engine
+from app.db.base import Base
 from app.services.activity_service import delete_old_activity
+from app.services.recommendation_service import delete_old_recommendations
 from app.routers.notifications import send_daily_digest_to_all
 
 
 async def _activity_cleanup_loop():
-    """Delete activity older than 7 days, runs every hour."""
+    """Delete activity and old recommendations, runs every hour."""
     while True:
         try:
             db = SessionLocal()
-            deleted = delete_old_activity(db)
-            if deleted:
-                print(f"[activity cleanup] Removed {deleted} old activity entries")
+            deleted_activity = delete_old_activity(db)
+            if deleted_activity:
+                print(f"[activity cleanup] Removed {deleted_activity} old activity entries")
+            deleted_recs = delete_old_recommendations(db)
+            if deleted_recs:
+                print(f"[activity cleanup] Removed {deleted_recs} expired recommendations")
         except Exception as e:
             print(f"[activity cleanup] Error: {e}")
         finally:
@@ -64,6 +70,21 @@ async def _daily_digest_loop():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Import all models so SQLAlchemy Base.metadata is populated before create_all
+    import app.models.user  # noqa: F401
+    import app.models.watched  # noqa: F401
+    import app.models.watchlist  # noqa: F401
+    import app.models.episode_watched  # noqa: F401
+    import app.models.currently_watching  # noqa: F401
+    import app.models.friendship  # noqa: F401
+    import app.models.favorite  # noqa: F401
+    import app.models.recommendation  # noqa: F401
+    import app.models.show  # noqa: F401
+    import app.models.movie  # noqa: F401
+    import app.models.episode  # noqa: F401
+    import app.models.activity  # noqa: F401
+    import app.models.review  # noqa: F401
+    Base.metadata.create_all(engine)
     task = asyncio.create_task(_activity_cleanup_loop())
     digest_task = asyncio.create_task(_daily_digest_loop())
     yield
@@ -102,3 +123,4 @@ app.include_router(ical.router, prefix="/ical", tags=["ical"])
 app.include_router(favorites.router, prefix="/favorites", tags=["favorites"])
 app.include_router(recommendations.router, prefix="/recommendations", tags=["recommendations"])
 app.include_router(events.router, prefix="/events", tags=["events"])
+app.include_router(reviews.router, prefix="/reviews", tags=["reviews"])

@@ -26,11 +26,17 @@ export default function Dashboard() {
     shows: [],
     movies: [],
   });
-  const [watchedEpisodeKeys, setWatchedEpisodeKeys] = useState<Set<string>>(new Set());
+  const [watchedEpisodeKeys, setWatchedEpisodeKeys] = useState<Set<string>>(
+    new Set(),
+  );
   const [showWatchlist, setShowWatchlist] = useState(false);
   const [showSyncModal, setShowSyncModal] = useState(false);
-  const [currentlyWatchingShows, setCurrentlyWatchingShows] = useState<Show[]>([]);
-  const [currentlyWatchingMovies, setCurrentlyWatchingMovies] = useState<Movie[]>([]);
+  const [currentlyWatchingShows, setCurrentlyWatchingShows] = useState<Show[]>(
+    [],
+  );
+  const [currentlyWatchingMovies, setCurrentlyWatchingMovies] = useState<
+    Movie[]
+  >([]);
 
   // Guest view data
   const [trendingResults, setTrendingResults] = useState<{
@@ -56,7 +62,10 @@ export default function Dashboard() {
     return res.json();
   }
 
-  async function fetchCurrentlyWatching(): Promise<{ shows: Show[]; movies: Movie[] }> {
+  async function fetchCurrentlyWatching(): Promise<{
+    shows: Show[];
+    movies: Movie[];
+  }> {
     const token = await auth.currentUser?.getIdToken();
     if (!token) return { shows: [], movies: [] };
     const res = await fetch(`${API_URL}/currently-watching/`, {
@@ -93,9 +102,14 @@ export default function Dashboard() {
       headers: { Authorization: `Bearer ${token}` },
     });
     if (!res.ok) return new Set();
-    const data: { show_id: number; season_number: number; episode_number: number }[] =
-      await res.json();
-    return new Set(data.map((e) => `${e.show_id}_${e.season_number}_${e.episode_number}`));
+    const data: {
+      show_id: number;
+      season_number: number;
+      episode_number: number;
+    }[] = await res.json();
+    return new Set(
+      data.map((e) => `${e.show_id}_${e.season_number}_${e.episode_number}`),
+    );
   }
 
   useEffect(() => {
@@ -125,23 +139,31 @@ export default function Dashboard() {
     async function fetchAllCalendarData() {
       setLoading(true);
       try {
-        const [tvShows, watchlistMovies, watchedMovies, episodeKeys, currentlyWatching] =
-          await Promise.all([
-            fetchTVCalendar(),
-            fetchMovieCalendar(),
-            fetchWatchedMovies(),
-            fetchWatchedEpisodeKeys(),
-            fetchCurrentlyWatching(),
-          ]);
+        const [
+          tvShows,
+          watchlistMovies,
+          watchedMovies,
+          episodeKeys,
+          currentlyWatching,
+        ] = await Promise.all([
+          fetchTVCalendar(),
+          fetchMovieCalendar(),
+          fetchWatchedMovies(),
+          fetchWatchedEpisodeKeys(),
+          fetchCurrentlyWatching(),
+        ]);
 
         setCurrentlyWatchingShows(currentlyWatching.shows);
         setCurrentlyWatchingMovies(currentlyWatching.movies);
 
         const movieMap = new Map<number, Movie>();
-        for (const m of watchlistMovies) movieMap.set(m.id, { ...m, isWatched: false });
-        for (const m of watchedMovies) movieMap.set(m.id, { ...m, isWatched: true });
+        for (const m of watchlistMovies)
+          movieMap.set(m.id, { ...m, isWatched: false });
+        for (const m of watchedMovies)
+          movieMap.set(m.id, { ...m, isWatched: true });
         for (const m of currentlyWatching.movies) {
-          if (!movieMap.has(m.id)) movieMap.set(m.id, { ...m, isWatched: false });
+          if (!movieMap.has(m.id))
+            movieMap.set(m.id, { ...m, isWatched: false });
         }
 
         const calendarData: CalendarData = {
@@ -184,7 +206,9 @@ export default function Dashboard() {
 
         const [trendingRes, upcomingRes] = await Promise.all([
           fetch(`${API_URL}/search/multi/trending`),
-          fetch(`${API_URL}/search/movie/upcoming?${new URLSearchParams({ min_date, max_date })}`),
+          fetch(
+            `${API_URL}/search/movie/upcoming?${new URLSearchParams({ min_date, max_date })}`,
+          ),
         ]);
 
         if (trendingRes.ok) {
@@ -223,9 +247,15 @@ export default function Dashboard() {
       <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8 pb-16">
         {/* Hero */}
         <div className="mb-10 text-center py-8">
-          <h1 className="text-4xl font-bold text-white mb-3">Track What You Watch</h1>
+          <h1 className="text-4xl font-bold text-white mb-3">
+            Track What You Watch
+          </h1>
           <p className="text-slate-400 mb-6 max-w-md mx-auto">
-            Keep up with your favourite shows and movies. Log what you've watched, build your watchlist, and never miss a release.
+            Keep up with your favourite shows and movies. Log what you've
+            watched, build your watchlist, and never miss a release.
+          </p>
+          <p className="text-xs text-slate-600 mb-6 max-w-sm mx-auto">
+            Calendar shows initial air dates only — reruns are not included.
           </p>
           <Link
             to="/signIn"
@@ -244,14 +274,19 @@ export default function Dashboard() {
         {!guestLoading && (
           <div className="flex flex-col gap-14">
             {/* Trending */}
-            {(trendingResults.movies.length > 0 || trendingResults.shows.length > 0 || trendingResults.people.length > 0) && (
+            {(trendingResults.movies.length > 0 ||
+              trendingResults.shows.length > 0 ||
+              trendingResults.people.length > 0) && (
               <div>
                 <div className="flex items-center justify-between mb-6">
                   <div className="flex items-center gap-2">
                     <h2 className="text-2xl font-bold text-white">Trending</h2>
                     <span className="text-lg">🔥</span>
                   </div>
-                  <Link to="/trending" className="text-sm text-blue-400 hover:text-blue-300 transition-colors">
+                  <Link
+                    to="/trending"
+                    className="text-sm text-blue-400 hover:text-blue-300 transition-colors"
+                  >
                     See all →
                   </Link>
                 </div>
@@ -271,12 +306,18 @@ export default function Dashboard() {
               <div>
                 <div className="flex items-center justify-between mb-6">
                   <h2 className="text-2xl font-bold text-white">Coming Soon</h2>
-                  <Link to="/upcoming" className="text-sm text-blue-400 hover:text-blue-300 transition-colors">
+                  <Link
+                    to="/upcoming"
+                    className="text-sm text-blue-400 hover:text-blue-300 transition-colors"
+                  >
                     See all →
                   </Link>
                 </div>
                 <MediaList
-                  results={{ movies: upcomingResults.movies.slice(0, 6), shows: [] }}
+                  results={{
+                    movies: upcomingResults.movies.slice(0, 6),
+                    shows: [],
+                  }}
                   showWatchButton={false}
                 />
               </div>
@@ -284,13 +325,25 @@ export default function Dashboard() {
 
             {/* Browse */}
             <div>
-              <h2 className="text-2xl font-bold text-white mb-4">Browse by Genre</h2>
+              <h2 className="text-2xl font-bold text-white mb-4">
+                Browse by Genre
+              </h2>
               <Link
                 to="/search-genres"
                 className="inline-flex items-center gap-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 hover:border-slate-600 text-slate-200 font-medium px-5 py-3 rounded-xl transition-colors"
               >
-                <svg className="w-5 h-5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+                <svg
+                  className="w-5 h-5 text-slate-400"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={1.5}
+                    d="M4 6h16M4 10h16M4 14h16M4 18h16"
+                  />
                 </svg>
                 Browse all genres
               </Link>
@@ -301,7 +354,11 @@ export default function Dashboard() {
     );
   }
 
-  function handleEpisodeWatched(showId: number, season: number, episode: number) {
+  function handleEpisodeWatched(
+    showId: number,
+    season: number,
+    episode: number,
+  ) {
     const key = `${showId}_${season}_${episode}`;
     setWatchedEpisodeKeys((prev) => new Set([...prev, key]));
   }
