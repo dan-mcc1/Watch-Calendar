@@ -12,7 +12,8 @@ from app.services.user_service import (
     update_avatar_key,
     is_username_available,
 )
-from app.services.friends_service import are_friends
+from app.services.friends_service import are_friends, get_friends
+from app.models.friendship import Friendship
 from app.services.user_service import get_profile_watchlist, get_profile_watched
 from app.services.favorite_service import get_favorites
 from app.services.stats_service import get_user_stats
@@ -157,11 +158,19 @@ def get_public_profile(
     is_friend = are_friends(db, uid, target.id)
     visibility = target.profile_visibility or "friends_only"
 
+    # Check for a pending outgoing request from the current user
+    pending = (
+        db.query(Friendship)
+        .filter_by(requester_id=uid, addressee_id=target.id, status="pending")
+        .first()
+    )
+
     profile = {
         "id": target.id,
         "username": target.username,
         "is_friend": is_friend,
         "profile_visibility": visibility,
+        "pending_request_id": pending.id if pending else None,
     }
 
     # Favorites are always public
@@ -174,6 +183,7 @@ def get_public_profile(
     if can_see_details:
         profile["watchlist"] = get_profile_watchlist(db, target.id)
         profile["watched"] = get_profile_watched(db, target.id)
+        profile["friends"] = get_friends(db, target.id)
 
     return profile
 
