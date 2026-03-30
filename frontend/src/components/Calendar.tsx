@@ -74,16 +74,14 @@ export default function CalendarComponent({
     time24: string | null | undefined,
     sourceTimeZone: string | null | undefined,
   ) {
-    if (!time24 || !sourceTimeZone) return null;
+    if (!time24 || !sourceTimeZone) return null; // nothing to display
 
-    // Split hours and minutes
     const [hour, minute] = time24.split(":").map(Number);
 
-    // Use current date
+    // Create a Date in the source timezone
     const now = new Date();
 
-    // Build a formatted string in the source timezone
-    const sourceDateParts = new Intl.DateTimeFormat("en-US", {
+    const sourceDateStr = new Intl.DateTimeFormat("en-US", {
       timeZone: sourceTimeZone,
       year: "numeric",
       month: "2-digit",
@@ -91,23 +89,13 @@ export default function CalendarComponent({
       hour: "2-digit",
       minute: "2-digit",
       hour12: false,
-    }).formatToParts(now);
+    }).format(now);
 
-    // Extract parts
-    const year = sourceDateParts.find((p) => p.type === "year")?.value;
-    const month = sourceDateParts.find((p) => p.type === "month")?.value;
-    const day = sourceDateParts.find((p) => p.type === "day")?.value;
+    const sourceDate = new Date(sourceDateStr);
+    sourceDate.setHours(hour, minute, 0, 0);
 
-    if (!year || !month || !day) return null;
-
-    // Create a date string in ISO format in the source timezone
-    const isoString = `${year}-${month}-${day}T${time24}:00`;
-
-    // Parse it as a Date object
-    const dateInSourceTZ = new Date(isoString);
-
-    // Convert to user local time automatically
-    return dateInSourceTZ.toLocaleTimeString(undefined, {
+    // Convert to user's local timezone automatically
+    return sourceDate.toLocaleTimeString(undefined, {
       hour: "numeric",
       minute: "2-digit",
       hour12: true,

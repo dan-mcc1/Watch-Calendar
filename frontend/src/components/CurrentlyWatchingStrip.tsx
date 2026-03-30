@@ -307,7 +307,7 @@ export default function CurrentlyWatchingStrip({
   if (total === 0) return null;
 
   return (
-    <div className="border-b border-slate-700 bg-slate-800/60">
+    <div className="flex flex-col border-b border-slate-700 bg-slate-800/60 max-w-7xl mx-auto">
       <button
         onClick={() => setOpen((o) => !o)}
         className="w-full flex items-center gap-2 px-4 sm:px-6 py-3 hover:bg-slate-700/40 transition-colors"
