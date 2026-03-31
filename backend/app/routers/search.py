@@ -80,10 +80,10 @@ def movie_trending(page: int = Query(1, ge=1)):
 
 
 @router.get("/tv/upcoming")
-def tv_upcoming(min_date: str, max_date: str):
-    return get_tv_upcoming(min_date, max_date)
+def tv_upcoming(min_date: str, max_date: str, page: int = Query(1, ge=1)):
+    return get_tv_upcoming(min_date, max_date, page)
 
 
 @router.get("/movie/upcoming")
-def movie_upcoming(min_date: str, max_date: str):
-    return get_movie_upcoming(min_date, max_date)
+def movie_upcoming(min_date: str, max_date: str, page: int = Query(1, ge=1)):
+    return get_movie_upcoming(min_date, max_date, page)

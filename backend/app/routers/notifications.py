@@ -5,10 +5,13 @@ from app.db.session import get_db
 from app.dependencies.auth import get_current_user
 from app.models.user import User
 from app.models.watchlist import Watchlist
+from app.models.watched import Watched
 from app.models.movie import Movie
 from app.models.show import Show
-from app.services.email_service import send_notification_email, format_air_time
+from app.models.season import Season
+from app.services.email_service import send_notification_email, send_season_premiere_email, format_air_time
 from datetime import date, timedelta
+from collections import defaultdict
 
 router = APIRouter()
 
@@ -128,6 +131,78 @@ def _should_send_today(frequency: str) -> bool:
     if frequency == "monthly":
         return today.day == 1
     return False
+
+
+def send_season_premiere_alerts_to_all(db: Session):
+    """
+    Send season-premiere alert emails to opted-in users.
+    Fires when a tracked show has a season premiering in exactly 30 or 7 days.
+    """
+    today = date.today()
+    target_dates = {
+        30: today + timedelta(days=30),
+        7: today + timedelta(days=7),
+    }
+
+    # Find all seasons whose air_date matches either target date
+    upcoming_seasons = (
+        db.query(Season)
+        .filter(Season.air_date.in_(target_dates.values()))
+        .all()
+    )
+    if not upcoming_seasons:
+        return
+
+    # Map show_id -> list of alert dicts
+    show_alerts: dict[int, list] = defaultdict(list)
+    for season in upcoming_seasons:
+        show = db.query(Show).filter_by(id=season.show_id).first()
+        if not show:
+            continue
+        days_away = next(d for d, dt in target_dates.items() if dt == season.air_date)
+        show_alerts[season.show_id].append({
+            "show_name": show.name,
+            "season_number": season.season_number,
+            "season_name": season.name,
+            "air_date": str(season.air_date),
+            "days_away": days_away,
+        })
+
+    if not show_alerts:
+        return
+
+    # Find all opted-in users who are tracking at least one of those shows
+    affected_show_ids = list(show_alerts.keys())
+    users = (
+        db.query(User)
+        .filter(User.email_notifications == True, User.email != None)
+        .all()
+    )
+
+    for user in users:
+        try:
+            tracked_show_ids = {
+                r.content_id
+                for r in db.query(Watchlist.content_id)
+                .filter_by(user_id=user.id, content_type="tv")
+                .all()
+            } | {
+                r.content_id
+                for r in db.query(Watched.content_id)
+                .filter_by(user_id=user.id, content_type="tv")
+                .all()
+            }
+
+            alerts = [
+                alert
+                for show_id in affected_show_ids
+                if show_id in tracked_show_ids
+                for alert in show_alerts[show_id]
+            ]
+            if alerts:
+                send_season_premiere_email(user.email, user.username or "", alerts)
+        except Exception as e:
+            print(f"[season alert] Failed for {user.email}: {e}")
 
 
 def send_daily_digest_to_all(db: Session):

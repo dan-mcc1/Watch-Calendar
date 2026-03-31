@@ -92,14 +92,28 @@ def get_movie_trending_results(page: int = 1):
 
 
 @lru_cache(maxsize=1024)
-def get_movie_upcoming(min_date: str, max_date: str):
-    return get(
-        f"/discover/movie?include_adult=false&include_video=false&language=en-US&page=1&sort_by=popularity.desc&with_release_type=3|2&primary_release_date.gte={min_date}&primary_release_date.lte={max_date}"
-    )
+def get_movie_upcoming(min_date: str, max_date: str, page: int = 1):
+    data = get("/discover/movie", params={
+        "include_adult": "false",
+        "include_video": "false",
+        "language": "en-US",
+        "sort_by": "popularity.desc",
+        "with_release_type": "3|2",
+        "primary_release_date.gte": min_date,
+        "primary_release_date.lte": max_date,
+        "page": page,
+    })
+    return {"results": data.get("results", []), "total_pages": min(data.get("total_pages", 1), 500)}
 
 
 @lru_cache(maxsize=1024)
-def get_tv_upcoming(min_date: str, max_date: str):
-    return get(
-        f"/discover/tv?include_adult=false&language=en-US&page=1&sort_by=popularity.desc&air_date.lte={max_date}&air_date.gte={min_date}"
-    )
+def get_tv_upcoming(min_date: str, max_date: str, page: int = 1):
+    data = get("/discover/tv", params={
+        "include_adult": "false",
+        "language": "en-US",
+        "sort_by": "popularity.desc",
+        "air_date.gte": min_date,
+        "air_date.lte": max_date,
+        "page": page,
+    })
+    return {"results": data.get("results", []), "total_pages": min(data.get("total_pages", 1), 500)}

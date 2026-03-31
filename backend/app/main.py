@@ -27,7 +27,7 @@ from app.db.session import SessionLocal, engine
 from app.db.base import Base
 from app.services.activity_service import delete_old_activity
 from app.services.recommendation_service import delete_old_recommendations
-from app.routers.notifications import send_daily_digest_to_all
+from app.routers.notifications import send_daily_digest_to_all, send_season_premiere_alerts_to_all
 from app.services.vote_update_service import update_all_vote_averages
 
 
@@ -66,6 +66,7 @@ async def _daily_digest_loop():
         try:
             db = SessionLocal()
             send_daily_digest_to_all(db)
+            send_season_premiere_alerts_to_all(db)
             print("[daily digest] Done — emails sent")
         except Exception as e:
             print(f"[daily digest] Error: {e}")

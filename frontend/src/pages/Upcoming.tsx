@@ -13,6 +13,8 @@ export default function Upcoming() {
     movies: [],
   });
   const [searchType, setSearchType] = useState<SearchType>("movie");
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
   const [loading, setLoading] = useState(false);
 
   const today = new Date();
@@ -27,11 +29,15 @@ export default function Upcoming() {
   };
 
   useEffect(() => {
+    setPage(1);
+  }, [searchType]);
+
+  useEffect(() => {
     async function fetchUpcoming() {
       setLoading(true);
       try {
         const endpoint = searchType === "tv" ? "tv" : "movie";
-        const params = new URLSearchParams({ min_date, max_date });
+        const params = new URLSearchParams({ min_date, max_date, page: String(page) });
         const res = await fetch(
           `${API_URL}/search/${endpoint}/upcoming?${params.toString()}`,
         );
@@ -42,6 +48,7 @@ export default function Upcoming() {
         } else {
           setResults({ movies: data.results ?? [], shows: [] });
         }
+        setTotalPages(data.total_pages ?? 1);
       } catch (err) {
         console.error(err);
       } finally {
@@ -49,7 +56,7 @@ export default function Upcoming() {
       }
     }
     fetchUpcoming();
-  }, [searchType]);
+  }, [searchType, page]);
 
   const total = results.movies.length + results.shows.length;
 
@@ -91,8 +98,8 @@ export default function Upcoming() {
       {/* Results count */}
       {!loading && total > 0 && (
         <p className="text-slate-500 text-sm mb-4">
-          {total} {searchType === "movie" ? "movies" : "shows"} releasing in the
-          next 30 days
+          {searchType === "movie" ? "Movies" : "TV shows"} releasing in the next
+          30 days — page {page} of {totalPages}
         </p>
       )}
 
@@ -124,7 +131,31 @@ export default function Upcoming() {
       {!loading && (
         <MediaList
           results={{ movies: results.movies, shows: results.shows, people: [] }}
+          paginated
         />
+      )}
+
+      {/* Pagination */}
+      {!loading && totalPages > 1 && (
+        <div className="flex items-center justify-center gap-4 mt-8">
+          <button
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            disabled={page === 1}
+            className="px-4 py-2 rounded-lg text-sm font-medium bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          >
+            Previous
+          </button>
+          <span className="text-slate-400 text-sm">
+            Page {page} of {totalPages}
+          </span>
+          <button
+            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            disabled={page === totalPages}
+            className="px-4 py-2 rounded-lg text-sm font-medium bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          >
+            Next
+          </button>
+        </div>
       )}
     </div>
   );

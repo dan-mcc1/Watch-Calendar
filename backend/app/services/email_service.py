@@ -90,6 +90,61 @@ def send_notification_email(to_email: str, username: str, upcoming_items: list):
     send_email(to_email, "Your Watch Calendar — Releasing Today", html_body)
 
 
+def send_season_premiere_email(to_email: str, username: str, alerts: list):
+    """
+    Send an alert email for upcoming season premieres.
+    Each alert dict has: show_name, season_number, season_name, air_date, days_away (7 or 30).
+    """
+    if not alerts:
+        return
+
+    # Group by days_away so we can write distinct subject lines
+    thirty_day = [a for a in alerts if a["days_away"] == 30]
+    seven_day = [a for a in alerts if a["days_away"] == 7]
+
+    def _alert_html(a: dict) -> str:
+        season_label = a.get("season_name") or f"Season {a['season_number']}"
+        return (
+            f'<li style="margin-bottom:10px">'
+            f'<strong>{a["show_name"]}</strong> — {season_label}'
+            f'<br><span style="color:#888;font-size:13px;">Premieres {a["air_date"]}</span>'
+            f'</li>'
+        )
+
+    sections = ""
+    if thirty_day:
+        items_html = "".join(_alert_html(a) for a in thirty_day)
+        sections += f"""
+        <h3 style="color:#1e40af;margin-top:20px">Coming in one month</h3>
+        <ul style="line-height:2">{items_html}</ul>
+        """
+    if seven_day:
+        items_html = "".join(_alert_html(a) for a in seven_day)
+        sections += f"""
+        <h3 style="color:#1e40af;margin-top:20px">Coming in one week</h3>
+        <ul style="line-height:2">{items_html}</ul>
+        """
+
+    count = len(alerts)
+    subject = (
+        f"New season{'s' if count > 1 else ''} coming soon — Watch Calendar"
+    )
+
+    html_body = f"""
+    <html><body style="font-family:sans-serif;color:#222;max-width:600px;margin:0 auto">
+    <h2 style="color:#1e3a8a">Hi {username or 'there'},</h2>
+    <p>Heads up! The following show{'s' if count > 1 else ''} you're tracking ha{'ve' if count > 1 else 's'} a new season coming up:</p>
+    {sections}
+    <p><a href="{settings.FRONTEND_URL}" style="color:#2563eb">View your Watch Calendar</a></p>
+    <p style="color:#888;font-size:12px;margin-top:24px;">
+        You're receiving this because you have email notifications enabled.
+        <a href="{settings.FRONTEND_URL}/settings" style="color:#888">Unsubscribe</a>
+    </p>
+    </body></html>
+    """
+    send_email(to_email, subject, html_body)
+
+
 def send_recommendation_email(
     to_email: str,
     to_username: str,
