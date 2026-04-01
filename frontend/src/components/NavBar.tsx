@@ -1,4 +1,5 @@
 import {
+  CloseButton,
   Disclosure,
   DisclosureButton,
   DisclosurePanel,
@@ -117,6 +118,7 @@ export default function NavBar() {
   const [user, setUser] = useState(auth.currentUser);
   const [mobileDiscoverOpen, setMobileDiscoverOpen] = useState(false);
   const [mobileLibraryOpen, setMobileLibraryOpen] = useState(false);
+  const mobileCloseRef = useRef<HTMLButtonElement>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [pendingRequests, setPendingRequests] = useState(0);
   const [unreadRecs, setUnreadRecs] = useState(0);
@@ -357,8 +359,6 @@ export default function NavBar() {
       as="nav"
       className="relative bg-[#1f3b4d] after:pointer-events-none after:absolute after:inset-x-0 after:bottom-0 after:h-px after:bg-white/10"
     >
-      {({ close }) => (
-      <>
       <div className="mx-auto max-w-7xl px-4 lg:px-8">
         <div className="relative flex h-16 items-center justify-between">
           {/* Mobile hamburger */}
@@ -617,37 +617,36 @@ export default function NavBar() {
 
       {/* Mobile panel */}
       <DisclosurePanel className="lg:hidden">
+        <CloseButton ref={mobileCloseRef} className="sr-only" aria-hidden="true" tabIndex={-1} />
         <div className="space-y-1 px-2 pt-2 pb-3">
           {/* Search */}
-          <div className="relative mb-2">
+          <form
+            className="relative mb-2"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (!searchQuery.trim()) return;
+              cancelPendingDropdown();
+              setDropdownOpen(false);
+              setDropdownLoading(false);
+              mobileCloseRef.current?.click();
+              navigate(`/search?q=${encodeURIComponent(searchQuery.trim())}`);
+            }}
+          >
             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                viewBox="0 0 24 24"
-                fill="currentColor"
-                className="w-4 h-4"
-              >
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4">
                 <path d="M10 2a8 8 0 105.293 14.293l4.707 4.707 1.414-1.414-4.707-4.707A8 8 0 0010 2zm0 2a6 6 0 110 12 6 6 0 010-12z" />
               </svg>
             </span>
             <input
-              type="text"
+              type="search"
+              enterKeyHint="search"
               value={searchQuery}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && searchQuery.trim() !== "") {
-                  cancelPendingDropdown();
-                  setDropdownOpen(false);
-                  setDropdownLoading(false);
-                  close();
-                  navigate(`/search?q=${encodeURIComponent(searchQuery.trim())}`);
-                }
-                if (e.key === "Escape") setDropdownOpen(false);
-              }}
               onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyDown={(e) => e.key === "Escape" && setDropdownOpen(false)}
               placeholder="Search..."
               className="pl-9 w-full py-2 rounded-md bg-[#2d4e63] border border-[#1f3b4d]/50 text-white text-sm placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-950/50 transition"
             />
-          </div>
+          </form>
 
           {/* Dashboard */}
           <DisclosureButton
@@ -756,8 +755,6 @@ export default function NavBar() {
           )}
         </div>
       </DisclosurePanel>
-      </>
-      )}
     </Disclosure>
   );
 }
