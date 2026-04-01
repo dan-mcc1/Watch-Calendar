@@ -2,7 +2,7 @@ import base64
 import hashlib
 import hmac
 from datetime import datetime, timedelta, timezone
-from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
@@ -22,6 +22,7 @@ router = APIRouter()
 
 
 # ── Token helpers ─────────────────────────────────────────────────────────────
+
 
 def _make_token(user_id: str) -> str:
     """Return a URL-safe token that encodes and authenticates the user_id."""
@@ -50,6 +51,7 @@ def _verify_token(token: str) -> str | None:
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
+
 @router.get("/token")
 def get_ical_token(uid: str = Depends(get_current_user)):
     """Return the user's personal iCal feed token (authenticated)."""
@@ -77,7 +79,9 @@ def get_ical_feed(token: str, db: Session = Depends(get_db)):
     cw_show_ids = {
         r.content_id
         for r in db.query(CurrentlyWatching.content_id)
-        .filter(CurrentlyWatching.user_id == user_id, CurrentlyWatching.content_type == "tv")
+        .filter(
+            CurrentlyWatching.user_id == user_id, CurrentlyWatching.content_type == "tv"
+        )
         .all()
     }
     show_ids = list(watchlist_show_ids | cw_show_ids)
@@ -92,7 +96,10 @@ def get_ical_feed(token: str, db: Session = Depends(get_db)):
     cw_movie_ids = {
         r.content_id
         for r in db.query(CurrentlyWatching.content_id)
-        .filter(CurrentlyWatching.user_id == user_id, CurrentlyWatching.content_type == "movie")
+        .filter(
+            CurrentlyWatching.user_id == user_id,
+            CurrentlyWatching.content_type == "movie",
+        )
         .all()
     }
     movie_ids = list(watchlist_movie_ids | cw_movie_ids)
@@ -110,7 +117,9 @@ def get_ical_feed(token: str, db: Session = Depends(get_db)):
     cal.add("x-wr-timezone", "UTC")
     cal.add("x-published-ttl", "PT12H")
 
-    def _timed_event(dtstart_utc: datetime, runtime_minutes: int | None) -> tuple[datetime, datetime]:
+    def _timed_event(
+        dtstart_utc: datetime, runtime_minutes: int | None
+    ) -> tuple[datetime, datetime]:
         """Return (dtstart, dtend) as UTC datetimes for a timed event."""
         dtend = dtstart_utc + timedelta(minutes=runtime_minutes or 60)
         return dtstart_utc, dtend
@@ -122,7 +131,11 @@ def get_ical_feed(token: str, db: Session = Depends(get_db)):
         majority of timezones and avoids mixing VALUE=DATE with DATETIME events
         (which breaks Outlook's parser).
         """
-        d = air_date if not isinstance(air_date, str) else datetime.fromisoformat(air_date).date()
+        d = (
+            air_date
+            if not isinstance(air_date, str)
+            else datetime.fromisoformat(air_date).date()
+        )
         dtstart = datetime(d.year, d.month, d.day, 0, 0, 0, tzinfo=timezone.utc)
         dtend = dtstart + timedelta(days=1)
         return dtstart, dtend
@@ -154,21 +167,32 @@ def get_ical_feed(token: str, db: Session = Depends(get_db)):
                     if show.air_timezone:
                         tz = ZoneInfo(show.air_timezone)
                         local_dt = datetime(
-                            ep.air_date.year, ep.air_date.month, ep.air_date.day,
-                            hour, minute, tzinfo=tz,
+                            ep.air_date.year,
+                            ep.air_date.month,
+                            ep.air_date.day,
+                            hour,
+                            minute,
+                            tzinfo=tz,
                         )
                         dtstart = local_dt.astimezone(timezone.utc)
                     else:
                         dtstart = datetime(
-                            ep.air_date.year, ep.air_date.month, ep.air_date.day,
-                            hour, minute, tzinfo=timezone.utc,
+                            ep.air_date.year,
+                            ep.air_date.month,
+                            ep.air_date.day,
+                            hour,
+                            minute,
+                            tzinfo=timezone.utc,
                         )
                     dtstart, dtend = _timed_event(dtstart, ep.runtime)
                 else:
                     dtstart, dtend = _allday_event(ep.air_date)
 
                 event = Event()
-                event.add("uid", f"tv-{ep.show_id}-s{ep.season_number}e{ep.episode_number}@watchcalendar")
+                event.add(
+                    "uid",
+                    f"tv-{ep.show_id}-s{ep.season_number}e{ep.episode_number}@watchcalendar",
+                )
                 event.add("dtstamp", now)
                 event.add("summary", summary)
                 event.add("dtstart", dtstart)

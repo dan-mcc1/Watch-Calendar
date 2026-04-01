@@ -1,12 +1,8 @@
 from fastapi import APIRouter, Query, HTTPException, Depends
 from app.services.tmdb_movies import (
     get_popular_movies,
-    get_trending_movies,
     get_now_playing_movies,
-    get_upcoming_movies,
-    search_movies,
     get_movies_by_actor,
-    get_movie_info,
     fetch_movie_from_tmdb,
 )
 from app.models.movie import Movie
@@ -53,7 +49,14 @@ def get_movie_info(
 @router.get("/{id}/info")
 def full_movie_info(id: int):
     append = ",".join(
-        ["watch/providers", "credits", "external_ids", "recommendations", "images", "videos"]
+        [
+            "watch/providers",
+            "credits",
+            "external_ids",
+            "recommendations",
+            "images",
+            "videos",
+        ]
     )
     movie_data = fetch_movie_from_tmdb(id, append)
     if not movie_data:
