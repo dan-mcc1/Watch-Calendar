@@ -4,7 +4,12 @@ import MediaList from "../components/MediaList";
 import type { Movie, Show } from "../types/calendar";
 import { usePageTitle } from "../hooks/usePageTitle";
 
-type SearchType = "tv" | "movie";
+type MediaType = "tv" | "movie";
+
+const TYPE_TABS: { label: string; value: MediaType }[] = [
+  { label: "Movies", value: "movie" },
+  { label: "TV Shows", value: "tv" },
+];
 
 export default function Upcoming() {
   usePageTitle("Upcoming");
@@ -12,7 +17,7 @@ export default function Upcoming() {
     shows: [],
     movies: [],
   });
-  const [searchType, setSearchType] = useState<SearchType>("movie");
+  const [activeType, setActiveType] = useState<MediaType>("movie");
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [loading, setLoading] = useState(false);
@@ -30,20 +35,24 @@ export default function Upcoming() {
 
   useEffect(() => {
     setPage(1);
-  }, [searchType]);
+  }, [activeType]);
 
   useEffect(() => {
     async function fetchUpcoming() {
       setLoading(true);
       try {
-        const endpoint = searchType === "tv" ? "tv" : "movie";
-        const params = new URLSearchParams({ min_date, max_date, page: String(page) });
+        const endpoint = activeType === "tv" ? "tv" : "movie";
+        const params = new URLSearchParams({
+          min_date,
+          max_date,
+          page: String(page),
+        });
         const res = await fetch(
           `${API_URL}/search/${endpoint}/upcoming?${params.toString()}`,
         );
         if (!res.ok) throw new Error("Failed to fetch upcoming");
         const data = await res.json();
-        if (searchType === "tv") {
+        if (activeType === "tv") {
           setResults({ movies: [], shows: data.results ?? [] });
         } else {
           setResults({ movies: data.results ?? [], shows: [] });
@@ -56,7 +65,7 @@ export default function Upcoming() {
       }
     }
     fetchUpcoming();
-  }, [searchType, page]);
+  }, [activeType, page]);
 
   const total = results.movies.length + results.shows.length;
 
@@ -68,19 +77,19 @@ export default function Upcoming() {
         <p className="text-slate-400 text-sm">{formatDateRange()}</p>
       </div>
 
-      {/* Type toggle */}
-      <div className="flex gap-1 border-b border-slate-700 mb-6">
-        {(["movie", "tv"] as SearchType[]).map((type) => (
+      {/* Type tabs */}
+      <div className="flex gap-1 mb-6">
+        {TYPE_TABS.map((tab) => (
           <button
-            key={type}
-            onClick={() => setSearchType(type)}
-            className={`px-5 py-2.5 text-sm font-medium transition-all duration-150 border-b-2 -mb-px ${
-              searchType === type
-                ? "border-blue-500 text-blue-400"
-                : "border-transparent text-slate-400 hover:text-slate-200"
+            key={tab.value}
+            onClick={() => setActiveType(tab.value)}
+            className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+              activeType === tab.value
+                ? "bg-blue-600 text-white"
+                : "bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white"
             }`}
           >
-            {type === "movie" ? "Movies" : "TV Shows"}
+            {tab.label}
           </button>
         ))}
       </div>
@@ -98,7 +107,7 @@ export default function Upcoming() {
       {/* Results count */}
       {!loading && total > 0 && (
         <p className="text-slate-500 text-sm mb-4">
-          {searchType === "movie" ? "Movies" : "TV shows"} releasing in the next
+          {activeType === "movie" ? "Movies" : "TV shows"} releasing in the next
           30 days — page {page} of {totalPages}
         </p>
       )}
