@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import "./App.css";
 import NavBar from "./components/NavBar";
+import InstallBanner from "./components/InstallBanner";
 import Search from "./pages/Search";
 import Dashboard from "./pages/Dashboard";
 import SignIn from "./pages/SignIn";
@@ -27,6 +28,7 @@ function App() {
       {/* <div className="min-h-screen bg-slate-950 text-slate-100"> */}
       <div className="flex flex-col min-h-screen bg-slate-950 text-slate-100">
         <NavBar />
+        <InstallBanner />
         <Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="/search" element={<Search />} />
