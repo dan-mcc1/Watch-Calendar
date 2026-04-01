@@ -220,7 +220,7 @@ export default function MovieInfo() {
     ) ?? movie.videos?.results?.find((v) => v.site === "YouTube");
 
   return (
-    <div className="max-w-5xl mx-auto pb-16">
+    <div className="max-w-5xl mx-auto pb-16 w-full overflow-x-hidden">
       {/* ── HERO BANNER ── */}
       <div className="relative overflow-hidden" style={{ minHeight: "280px" }}>
         {movie.backdrop_path ? (
@@ -267,8 +267,8 @@ export default function MovieInfo() {
 
       {/* ── CONTENT ── */}
       <div className="px-4 sm:px-6 mt-6 space-y-8">
-        {/* Genres + watch button + trailer */}
-        <div className="flex flex-wrap items-center gap-3">
+        {/* Buttons row */}
+        <div className="flex flex-wrap items-center gap-2">
           {user && <WatchButton contentType="movie" contentId={movie.id} />}
           {user && <FavoriteButton contentType="movie" contentId={movie.id} />}
           {user && (
@@ -284,28 +284,28 @@ export default function MovieInfo() {
               href={`https://www.youtube.com/watch?v=${trailer.key}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-red-600 hover:bg-red-500 text-white text-sm font-semibold transition-colors"
+              className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-red-600 hover:bg-red-500 text-white text-sm font-semibold transition-colors"
             >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                viewBox="0 0 24 24"
-                fill="currentColor"
-                className="w-4 h-4"
-              >
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4">
                 <path d="M8 5v14l11-7z" />
               </svg>
-              Watch Trailer
+              Trailer
             </a>
           )}
-          {movie.genres?.map((genre) => (
-            <span
-              key={genre.id}
-              className="px-3 py-1 text-sm rounded-full bg-slate-700/60 border border-slate-600 text-slate-300"
-            >
-              {genre.name}
-            </span>
-          ))}
         </div>
+        {/* Genre pills */}
+        {movie.genres && movie.genres.length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            {movie.genres.map((genre) => (
+              <span
+                key={genre.id}
+                className="px-3 py-1 text-sm rounded-full bg-slate-700/60 border border-slate-600 text-slate-300"
+              >
+                {genre.name}
+              </span>
+            ))}
+          </div>
+        )}
 
         {/* Stat boxes */}
         <div className="flex flex-wrap gap-3">

@@ -237,28 +237,27 @@ export default function SeasonInfo({
               key={season.id}
               className="border border-slate-700 rounded-md p-2"
             >
-              <div className="flex items-start gap-4">
+              <div className="flex items-start gap-3">
                 {season.poster_path && (
                   <img
                     src={`${BASE_IMAGE_URL}/w154${season.poster_path}`}
                     alt={season.name}
-                    className="w-24 h-auto rounded-md object-cover"
+                    className="w-16 sm:w-24 flex-shrink-0 h-auto rounded-md object-cover"
                   />
                 )}
-                <div className="flex-1">
+                <div className="flex-1 min-w-0">
                   <h3 className="font-semibold">{season.name}</h3>
                   <p className="text-slate-400 text-sm">
-                    Air date:{" "}
                     {season.air_date
                       ? new Date(
                           season.air_date + "T00:00:00",
                         ).toLocaleDateString(undefined, {
                           year: "numeric",
-                          month: "long",
+                          month: "short",
                           day: "numeric",
                         })
-                      : "N/A"}{" "}
-                    | Episodes: {season.episode_count}
+                      : "No date"}{" "}
+                    · {season.episode_count} eps
                   </p>
                   {isLoggedIn && totalCount > 0 && (
                     <div className="flex items-center gap-2 mt-1">
@@ -276,7 +275,7 @@ export default function SeasonInfo({
                     </div>
                   )}
                 </div>
-                <div className="flex items-center gap-2 ml-auto">
+                <div className="flex items-center gap-2 flex-shrink-0">
                   {isLoggedIn && (
                     <button
                       onClick={() => toggleSeasonWatched(season, allWatched)}
@@ -284,7 +283,7 @@ export default function SeasonInfo({
                       title={
                         allWatched ? "Unwatch season" : "Mark season as watched"
                       }
-                      className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium transition-all duration-150 disabled:opacity-50 ${
+                      className={`flex items-center gap-1.5 px-2 py-1 rounded-lg text-xs font-medium transition-all duration-150 disabled:opacity-50 ${
                         allWatched
                           ? "bg-green-700/40 border border-green-600/60 text-green-400 hover:bg-red-900/30 hover:border-red-600/40 hover:text-red-400"
                           : "bg-slate-700 border border-slate-600 text-slate-400 hover:bg-green-900/30 hover:border-green-600/40 hover:text-green-400"
@@ -415,7 +414,7 @@ export default function SeasonInfo({
                                     <img
                                       src={`${BASE_IMAGE_URL}/w300${ep.still_path}`}
                                       alt={ep.name}
-                                      className="w-40 h-auto rounded-md object-cover"
+                                      className="w-28 sm:w-40 h-auto rounded-md object-cover"
                                     />
                                     {(() => {
                                       const tag = getEpisodeTag(

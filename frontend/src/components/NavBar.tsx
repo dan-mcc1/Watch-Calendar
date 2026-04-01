@@ -115,6 +115,8 @@ export default function NavBar() {
   const navigate = useNavigate();
   const auth = getAuth(firebaseApp);
   const [user, setUser] = useState(auth.currentUser);
+  const [mobileDiscoverOpen, setMobileDiscoverOpen] = useState(false);
+  const [mobileLibraryOpen, setMobileLibraryOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [pendingRequests, setPendingRequests] = useState(0);
   const [unreadRecs, setUnreadRecs] = useState(0);
@@ -355,6 +357,8 @@ export default function NavBar() {
       as="nav"
       className="relative bg-[#1f3b4d] after:pointer-events-none after:absolute after:inset-x-0 after:bottom-0 after:h-px after:bg-white/10"
     >
+      {({ close }) => (
+      <>
       <div className="mx-auto max-w-7xl px-4 lg:px-8">
         <div className="relative flex h-16 items-center justify-between">
           {/* Mobile hamburger */}
@@ -629,7 +633,16 @@ export default function NavBar() {
             <input
               type="text"
               value={searchQuery}
-              onKeyDown={handleKeyDown}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && searchQuery.trim() !== "") {
+                  cancelPendingDropdown();
+                  setDropdownOpen(false);
+                  setDropdownLoading(false);
+                  close();
+                  navigate(`/search?q=${encodeURIComponent(searchQuery.trim())}`);
+                }
+                if (e.key === "Escape") setDropdownOpen(false);
+              }}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search..."
               className="pl-9 w-full py-2 rounded-md bg-[#2d4e63] border border-[#1f3b4d]/50 text-white text-sm placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-950/50 transition"
@@ -650,68 +663,101 @@ export default function NavBar() {
             Dashboard
           </DisclosureButton>
 
-          {/* Discover group */}
-          <p className="px-3 pt-2 pb-1 text-xs uppercase tracking-wider text-gray-500 font-semibold">
+          {/* Discover accordion */}
+          <button
+            onClick={() => setMobileDiscoverOpen((o) => !o)}
+            className="flex w-full items-center justify-between rounded-md px-3 py-2 text-base font-medium text-gray-300 hover:bg-white/5 hover:text-white"
+          >
             Discover
-          </p>
-          {discoverLinks.map((item) => (
-            <DisclosureButton
-              key={item.name}
-              as="a"
-              href={item.href}
-              className={classNames(
-                location.pathname === item.href
-                  ? "bg-gray-950/50 text-white"
-                  : "text-gray-300 hover:bg-white/5 hover:text-white",
-                "block rounded-md px-3 py-2 text-base font-medium",
-              )}
+            <svg
+              className={`w-4 h-4 opacity-60 transition-transform duration-200 ${mobileDiscoverOpen ? "rotate-180" : ""}`}
+              fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}
             >
-              {item.name}
-            </DisclosureButton>
-          ))}
+              <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+          {mobileDiscoverOpen && (
+            <div className="ml-3 border-l border-white/10 pl-3 flex flex-col gap-0.5">
+              {discoverLinks.map((item) => (
+                <DisclosureButton
+                  key={item.name}
+                  as="a"
+                  href={item.href}
+                  className={classNames(
+                    location.pathname === item.href
+                      ? "bg-gray-950/50 text-white"
+                      : "text-gray-300 hover:bg-white/5 hover:text-white",
+                    "block rounded-md px-3 py-2 text-sm font-medium",
+                  )}
+                >
+                  {item.name}
+                </DisclosureButton>
+              ))}
+            </div>
+          )}
 
-          {/* My Library group — signed in only */}
+          {/* My Library accordion — signed in only */}
           {user && (
             <>
-              <p className="px-3 pt-2 pb-1 text-xs uppercase tracking-wider text-gray-500 font-semibold">
-                My Library
-              </p>
-              {libraryLinks.map((item) => {
-                const badge = libraryBadges[item.href] ?? 0;
-                return (
+              <button
+                onClick={() => setMobileLibraryOpen((o) => !o)}
+                className="flex w-full items-center justify-between rounded-md px-3 py-2 text-base font-medium text-gray-300 hover:bg-white/5 hover:text-white"
+              >
+                <span className="flex items-center gap-1">
+                  My Library
+                  {(Object.values(libraryBadges).reduce((a, b) => a + b, 0) + pendingRequests) > 0 && (
+                    <Badge count={Object.values(libraryBadges).reduce((a, b) => a + b, 0) + pendingRequests} />
+                  )}
+                </span>
+                <svg
+                  className={`w-4 h-4 opacity-60 transition-transform duration-200 ${mobileLibraryOpen ? "rotate-180" : ""}`}
+                  fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+              {mobileLibraryOpen && (
+                <div className="ml-3 border-l border-white/10 pl-3 flex flex-col gap-0.5">
+                  {libraryLinks.map((item) => {
+                    const badge = libraryBadges[item.href] ?? 0;
+                    return (
+                      <DisclosureButton
+                        key={item.name}
+                        as="a"
+                        href={item.href}
+                        className={classNames(
+                          location.pathname === item.href
+                            ? "bg-gray-950/50 text-white"
+                            : "text-gray-300 hover:bg-white/5 hover:text-white",
+                          "flex items-center justify-between rounded-md px-3 py-2 text-sm font-medium",
+                        )}
+                      >
+                        {item.name}
+                        {badge > 0 && <Badge count={badge} />}
+                      </DisclosureButton>
+                    );
+                  })}
                   <DisclosureButton
-                    key={item.name}
                     as="a"
-                    href={item.href}
+                    href="/profile"
                     className={classNames(
-                      location.pathname === item.href
+                      location.pathname === "/profile"
                         ? "bg-gray-950/50 text-white"
                         : "text-gray-300 hover:bg-white/5 hover:text-white",
-                      "flex items-center justify-between rounded-md px-3 py-2 text-base font-medium",
+                      "flex items-center justify-between rounded-md px-3 py-2 text-sm font-medium",
                     )}
                   >
-                    {item.name}
-                    {badge > 0 && <Badge count={badge} />}
+                    Profile
+                    {pendingRequests > 0 && <Badge count={pendingRequests} />}
                   </DisclosureButton>
-                );
-              })}
-              <DisclosureButton
-                as="a"
-                href="/profile"
-                className={classNames(
-                  location.pathname === "/profile"
-                    ? "bg-gray-950/50 text-white"
-                    : "text-gray-300 hover:bg-white/5 hover:text-white",
-                  "flex items-center justify-between rounded-md px-3 py-2 text-base font-medium",
-                )}
-              >
-                Profile
-                {pendingRequests > 0 && <Badge count={pendingRequests} />}
-              </DisclosureButton>
+                </div>
+              )}
             </>
           )}
         </div>
       </DisclosurePanel>
+      </>
+      )}
     </Disclosure>
   );
 }
