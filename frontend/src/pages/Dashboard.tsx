@@ -17,6 +17,7 @@ import { usePageTitle } from "../hooks/usePageTitle";
 import { Link } from "react-router-dom";
 import { getDashboardCache, setDashboardCache } from "../utils/dashboardCache";
 
+
 export default function Dashboard() {
   usePageTitle();
   const [user, setUser] = useState<User | null>(null);
@@ -37,6 +38,10 @@ export default function Dashboard() {
   const [currentlyWatchingMovies, setCurrentlyWatchingMovies] = useState<
     Movie[]
   >([]);
+
+  // For You recommendations (signed-in)
+  const [forYouMovies, setForYouMovies] = useState<Movie[]>([]);
+  const [forYouShows, setForYouShows] = useState<Show[]>([]);
 
   // Guest view data
   const [trendingResults, setTrendingResults] = useState<{
@@ -189,6 +194,22 @@ export default function Dashboard() {
     }
 
     fetchAllCalendarData();
+  }, [user]);
+
+  useEffect(() => {
+    if (!user) return;
+    user.getIdToken().then((token) =>
+      fetch(`${API_URL}/recommendations/for-you`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((data) => {
+          if (!data) return;
+          setForYouMovies((data.movies ?? []).slice(0, 4));
+          setForYouShows((data.shows ?? []).slice(0, 4));
+        })
+        .catch(() => {}),
+    );
   }, [user]);
 
   // Fetch public content for guest view
@@ -386,6 +407,29 @@ export default function Dashboard() {
         isOpen={showSyncModal}
         onClose={() => setShowSyncModal(false)}
       />
+
+      {/* For You preview */}
+      {(forYouMovies.length > 0 || forYouShows.length > 0) && (
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-bold text-white">For You</h2>
+            <Link
+              to="/for-you"
+              className="text-sm text-blue-400 hover:text-blue-300 transition-colors"
+            >
+              See all →
+            </Link>
+          </div>
+          <MediaList
+            results={{
+              movies: forYouMovies,
+              shows: forYouShows,
+              people: [],
+            }}
+            paginated
+          />
+        </div>
+      )}
     </div>
   );
 }

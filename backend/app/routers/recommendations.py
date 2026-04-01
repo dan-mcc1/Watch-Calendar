@@ -11,8 +11,20 @@ from app.services.recommendation_service import (
 )
 from app.services.email_service import send_recommendation_email
 from app.core.event_bus import publish
+from app.services.for_you_service import get_for_you_recommendations
 
 router = APIRouter()
+
+
+@router.get("/for-you")
+def for_you(
+    mode: str = "recent",
+    db: Session = Depends(get_db),
+    uid: str = Depends(get_current_user),
+):
+    if mode not in ("recent", "top_rated"):
+        mode = "recent"
+    return get_for_you_recommendations(db, uid, mode)
 
 
 @router.post("/send")

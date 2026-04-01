@@ -346,6 +346,7 @@ export default function NavBar() {
   const libraryLinks = [
     { name: "Watchlist", href: "/watchlist" },
     { name: "Watched", href: "/watched" },
+    { name: "For You", href: "/for-you" },
     { name: "Activity", href: "/activity" },
   ];
 

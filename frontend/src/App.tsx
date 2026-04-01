@@ -19,6 +19,7 @@ import ActivityFeedPage from "./pages/ActivityFeedPage";
 import EpisodeInfo from "./pages/EpisodeInfo";
 import BoxOffice from "./pages/BoxOffice";
 import CollectionInfo from "./pages/CollectionInfo";
+import ForYou from "./pages/ForYou";
 
 function App() {
   return (
@@ -48,6 +49,7 @@ function App() {
           />
           <Route path="/box-office" element={<BoxOffice />} />
           <Route path="/collection/:id" element={<CollectionInfo />} />
+          <Route path="/for-you" element={<ForYou />} />
         </Routes>
       </div>
     </BrowserRouter>
