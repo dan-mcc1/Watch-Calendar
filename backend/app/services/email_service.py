@@ -1,31 +1,45 @@
-import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
+import hmac
+import hashlib
+import resend
 from app.config import settings
 
 
+def _unsubscribe_url(uid: str) -> str:
+    token = hmac.new(
+        settings.UNSUBSCRIBE_SECRET.encode(),
+        uid.encode(),
+        hashlib.sha256,
+    ).hexdigest()
+    return f"{settings.FRONTEND_URL}/unsubscribe?uid={uid}&token={token}"
+
+
+def _unsubscribe_footer(uid: str) -> str:
+    url = _unsubscribe_url(uid)
+    return (
+        f'<p style="color:#888;font-size:12px;margin-top:24px;">'
+        f'You\'re receiving this because you have email notifications enabled.<br>'
+        f'<a href="{url}" style="display:inline-block;margin-top:8px;padding:6px 14px;'
+        f'background:#374151;color:#d1d5db;font-size:12px;text-decoration:none;'
+        f'border-radius:6px;border:1px solid #4b5563;">Unsubscribe</a>'
+        f'</p>'
+    )
+
+
 def send_email(to_email: str, subject: str, html_body: str):
-    if not settings.SMTP_HOST or not settings.SMTP_USER or not settings.SMTP_PASSWORD:
-        print(f"[email_service] SMTP not configured, skipping email to {to_email}")
+    if not settings.RESEND_API_KEY:
+        print(f"[email_service] RESEND_API_KEY not configured, skipping email to {to_email}")
         return
 
-    msg = MIMEMultipart("alternative")
-    msg["Subject"] = subject
-    msg["From"] = settings.SMTP_FROM or settings.SMTP_USER
-    msg["To"] = to_email
-    msg.attach(MIMEText(html_body, "html"))
-
+    resend.api_key = settings.RESEND_API_KEY
     try:
-        with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=15) as server:
-            server.ehlo()
-            if settings.SMTP_USE_TLS:
-                server.starttls()
-            server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
-            server.sendmail(msg["From"], to_email, msg.as_string())
-    except OSError as e:
-        print(f"[email_service] Network error sending to {to_email}: {e}")
-    except smtplib.SMTPException as e:
-        print(f"[email_service] SMTP error sending to {to_email}: {e}")
+        resend.Emails.send({
+            "from": settings.EMAIL_FROM,
+            "to": to_email,
+            "subject": subject,
+            "html": html_body,
+        })
+    except Exception as e:
+        print(f"[email_service] Failed to send email to {to_email}: {e}")
 
 
 _TZ_ABBR = {
@@ -57,7 +71,7 @@ def format_air_time(air_time: str | None, air_timezone: str | None) -> str | Non
         return None
 
 
-def send_notification_email(to_email: str, username: str, upcoming_items: list):
+def send_notification_email(to_email: str, username: str, upcoming_items: list, uid: str = ""):
     """Send a digest email of upcoming episodes/releases."""
     if not upcoming_items:
         return
@@ -81,16 +95,13 @@ def send_notification_email(to_email: str, username: str, upcoming_items: list):
     <p>Here's what's releasing on your Watch Calendar:</p>
     <ul style="line-height:1.8">{items_html}</ul>
     <p><a href="{settings.FRONTEND_URL}" style="color:#2563eb">View your calendar</a></p>
-    <p style="color:#888;font-size:12px;">
-        You're receiving this because you have email notifications enabled.
-        <a href="{settings.FRONTEND_URL}/settings" style="color:#888">Unsubscribe</a>
-    </p>
+    {_unsubscribe_footer(uid)}
     </body></html>
     """
     send_email(to_email, "Your Watch Calendar — Releasing Today", html_body)
 
 
-def send_season_premiere_email(to_email: str, username: str, alerts: list):
+def send_season_premiere_email(to_email: str, username: str, alerts: list, uid: str = ""):
     """
     Send an alert email for upcoming season premieres.
     Each alert dict has: show_name, season_number, season_name, air_date, days_away (7 or 30).
@@ -136,10 +147,7 @@ def send_season_premiere_email(to_email: str, username: str, alerts: list):
     <p>Heads up! The following show{'s' if count > 1 else ''} you're tracking ha{'ve' if count > 1 else 's'} a new season coming up:</p>
     {sections}
     <p><a href="{settings.FRONTEND_URL}" style="color:#2563eb">View your Watch Calendar</a></p>
-    <p style="color:#888;font-size:12px;margin-top:24px;">
-        You're receiving this because you have email notifications enabled.
-        <a href="{settings.FRONTEND_URL}/settings" style="color:#888">Unsubscribe</a>
-    </p>
+    {_unsubscribe_footer(uid)}
     </body></html>
     """
     send_email(to_email, subject, html_body)
@@ -153,6 +161,7 @@ def send_recommendation_email(
     content_title: str,
     content_id: int,
     message: str | None,
+    uid: str = "",
 ):
     content_path = f"{'movie' if content_type == 'movie' else 'tv'}/{content_id}"
     content_url = f"{settings.FRONTEND_URL}/{content_path}"
@@ -179,9 +188,7 @@ def send_recommendation_email(
         View {content_title}
       </a>
     </p>
-    <p style="color:#888;font-size:12px;margin-top:24px;">
-      You received this because {from_username} is your friend on Watch Calendar.
-    </p>
+    {_unsubscribe_footer(uid)}
     </body></html>
     """
     send_email(to_email, f"{from_username} recommended \"{content_title}\" to you", html_body)

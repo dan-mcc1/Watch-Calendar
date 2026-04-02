@@ -1,4 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
+import hmac
+import hashlib
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from app.db.session import get_db
@@ -10,6 +12,7 @@ from app.models.movie import Movie
 from app.models.show import Show
 from app.models.season import Season
 from app.services.email_service import send_notification_email, send_season_premiere_email, format_air_time
+from app.config import settings
 from datetime import date, timedelta
 from collections import defaultdict
 
@@ -200,7 +203,7 @@ def send_season_premiere_alerts_to_all(db: Session):
                 for alert in show_alerts[show_id]
             ]
             if alerts:
-                send_season_premiere_email(user.email, user.username or "", alerts)
+                send_season_premiere_email(user.email, user.username or "", alerts, uid=user.id)
         except Exception as e:
             print(f"[season alert] Failed for {user.email}: {e}")
 
@@ -224,7 +227,7 @@ def send_daily_digest_to_all(db: Session):
             window = _frequency_window(freq)
             items = _build_items_for_window(db, user.id, window)
             if items:
-                send_notification_email(user.email, user.username or "", items)
+                send_notification_email(user.email, user.username or "", items, uid=user.id)
         except Exception as e:
             print(f"[digest] Failed for {user.email}: {e}")
 
@@ -252,3 +255,26 @@ def send_digest(
         send_notification_email, user.email, user.username or "", upcoming
     )
     return {"message": "Digest email queued"}
+
+
+@router.get("/unsubscribe")
+def unsubscribe(
+    uid: str = Query(...),
+    token: str = Query(...),
+    db: Session = Depends(get_db),
+):
+    expected = hmac.new(
+        settings.UNSUBSCRIBE_SECRET.encode(),
+        uid.encode(),
+        hashlib.sha256,
+    ).hexdigest()
+    if not hmac.compare_digest(expected, token):
+        raise HTTPException(status_code=400, detail="Invalid unsubscribe token")
+
+    user = db.query(User).filter_by(id=uid).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    user.email_notifications = False
+    db.commit()
+    return {"message": "Unsubscribed successfully"}

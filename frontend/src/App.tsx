@@ -21,6 +21,7 @@ import EpisodeInfo from "./pages/EpisodeInfo";
 import BoxOffice from "./pages/BoxOffice";
 import CollectionInfo from "./pages/CollectionInfo";
 import ForYou from "./pages/ForYou";
+import Unsubscribe from "./pages/Unsubscribe";
 
 function App() {
   return (
@@ -52,6 +53,7 @@ function App() {
           <Route path="/box-office" element={<BoxOffice />} />
           <Route path="/collection/:id" element={<CollectionInfo />} />
           <Route path="/for-you" element={<ForYou />} />
+          <Route path="/unsubscribe" element={<Unsubscribe />} />
         </Routes>
       </div>
     </BrowserRouter>

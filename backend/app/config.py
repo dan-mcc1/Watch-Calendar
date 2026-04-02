@@ -6,12 +6,9 @@ class Settings(BaseSettings):
     DATABASE_URL: str
     FRONTEND_URL: str = "https://watch-calendar.vercel.app"
     FIREBASE_CREDS_PATH: str = "/etc/secrets/firebase-service.json"
-    SMTP_HOST: str = "smtp.gmail.com"
-    SMTP_PORT: int = 587
-    SMTP_USER: str = ""
-    SMTP_PASSWORD: str = ""
-    SMTP_FROM: str = ""
-    SMTP_USE_TLS: bool = True
+    RESEND_API_KEY: str = ""
+    EMAIL_FROM: str = "Watch Calendar <onboarding@resend.dev>"
+    UNSUBSCRIBE_SECRET: str = "change-me-to-a-random-secret"
     ICAL_SECRET: str = "change-me-to-a-random-secret"
     OMDB_API_KEY: str = ""  # Free key from https://www.omdbapi.com/ (for RT/Metacritic scores)
 

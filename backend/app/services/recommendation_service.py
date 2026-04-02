@@ -55,6 +55,7 @@ def send_recommendation(
             "content_title": content_title or "something",
             "content_id": content_id,
             "message": message,
+            "uid": recipient.id,
         }
 
     return entry

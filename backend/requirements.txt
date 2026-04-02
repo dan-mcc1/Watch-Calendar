@@ -6,3 +6,4 @@ requests
 firebase_admin
 psycopg2-binary
 icalendar
+resend
