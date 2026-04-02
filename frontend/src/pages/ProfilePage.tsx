@@ -9,6 +9,7 @@ import FriendRequests from "../components/FriendRequests";
 import FriendsList from "../components/FriendsList";
 import StatsSection from "../components/StatsSection";
 import { usePageTitle } from "../hooks/usePageTitle";
+import { getCachedWatchlist, setCachedWatchlist, getCachedWatched, setCachedWatched } from "../utils/watchlistCache";
 
 interface DBUser {
   id: string;
@@ -179,34 +180,38 @@ export default function ProfilePage() {
     try {
       const tok = await firebaseUser.getIdToken();
       setToken(tok);
+      const uid = firebaseUser.uid;
 
-      const [watchlistRes, watchedRes, meRes, favoritesRes] = await Promise.all(
-        [
-          fetch(`${API_URL}/watchlist`, {
-            headers: { Authorization: `Bearer ${tok}` },
-          }),
-          fetch(`${API_URL}/watched`, {
-            headers: { Authorization: `Bearer ${tok}` },
-          }),
-          fetch(`${API_URL}/user/me`, {
-            headers: { Authorization: `Bearer ${tok}` },
-          }),
-          fetch(`${API_URL}/favorites`, {
-            headers: { Authorization: `Bearer ${tok}` },
-          }),
-        ],
-      );
+      const cachedWatchlist = getCachedWatchlist(uid);
+      const cachedWatched = getCachedWatched(uid);
 
-      setWatchlist(
-        watchlistRes.ok ? await watchlistRes.json() : { movies: [], shows: [] },
-      );
-      setWatched(
-        watchedRes.ok ? await watchedRes.json() : { movies: [], shows: [] },
-      );
+      const [meRes, favoritesRes, watchlistRes, watchedRes] = await Promise.all([
+        fetch(`${API_URL}/user/me`, { headers: { Authorization: `Bearer ${tok}` } }),
+        fetch(`${API_URL}/favorites`, { headers: { Authorization: `Bearer ${tok}` } }),
+        cachedWatchlist ? Promise.resolve(null) : fetch(`${API_URL}/watchlist`, { headers: { Authorization: `Bearer ${tok}` } }),
+        cachedWatched ? Promise.resolve(null) : fetch(`${API_URL}/watched`, { headers: { Authorization: `Bearer ${tok}` } }),
+      ]);
+
       setDbUser(meRes.ok ? await meRes.json() : null);
-      setFavorites(
-        favoritesRes.ok ? await favoritesRes.json() : { movies: [], shows: [] },
-      );
+      setFavorites(favoritesRes.ok ? await favoritesRes.json() : { movies: [], shows: [] });
+
+      if (cachedWatchlist) {
+        setWatchlist(cachedWatchlist);
+      } else if (watchlistRes?.ok) {
+        const data = await watchlistRes.json();
+        const wl = { movies: data.movies ?? [], shows: data.shows ?? [] };
+        setWatchlist(wl);
+        setCachedWatchlist(uid, wl);
+      }
+
+      if (cachedWatched) {
+        setWatched(cachedWatched);
+      } else if (watchedRes?.ok) {
+        const data = await watchedRes.json();
+        const wd = { movies: data.movies ?? [], shows: data.shows ?? [] };
+        setWatched(wd);
+        setCachedWatched(uid, wd);
+      }
 
       await fetchFriends(tok);
     } catch (err) {

@@ -4,7 +4,10 @@ import { firebaseApp } from "../firebase";
 import { API_URL, BASE_IMAGE_URL } from "../constants";
 import { Link, useNavigate } from "react-router-dom";
 import { usePageTitle } from "../hooks/usePageTitle";
-import WatchButton from "../components/WatchButton";
+import WatchButton, { WatchStatus } from "../components/WatchButton";
+import { getCachedStatuses, mergeCachedStatuses } from "../utils/statusCache";
+
+type StatusMap = Record<string, { status: WatchStatus; rating: number | null }>;
 
 interface ActivityItem {
   id: number;
@@ -74,9 +77,13 @@ function StarDisplay({ rating }: { rating: number }) {
 function ActivityRow({
   item,
   currentUserId,
+  statusMap,
+  statusesReady,
 }: {
   item: ActivityItem;
   currentUserId: string;
+  statusMap: StatusMap;
+  statusesReady: boolean;
 }) {
   const isMe = item.user_id === currentUserId;
   const nameLabel = isMe ? "You" : (item.username ?? "Someone");
@@ -164,11 +171,13 @@ function ActivityRow({
         </div>
       </div>
 
-      {!isMe && (
+      {!isMe && statusesReady && (
         <div className="flex-shrink-0 self-center">
           <WatchButton
             contentType={item.content_type}
             contentId={item.content_id}
+            initialStatus={statusMap[`${item.content_type}:${item.content_id}`]?.status}
+            initialRating={statusMap[`${item.content_type}:${item.content_id}`]?.rating}
           />
         </div>
       )}
@@ -180,10 +189,14 @@ function RecommendationRow({
   item,
   onRead,
   onDelete,
+  statusMap,
+  statusesReady,
 }: {
   item: RecommendationItem;
   onRead: (id: number) => void;
   onDelete: (id: number) => void;
+  statusMap: StatusMap;
+  statusesReady: boolean;
 }) {
   const contentPath = `/${item.content_type === "movie" ? "movie" : "tv"}/${item.content_id}`;
 
@@ -267,15 +280,19 @@ function RecommendationRow({
         </svg>
       </button>
 
-      <div className="flex-shrink-0 self-center">
-        <WatchButton
-          contentType={item.content_type}
-          contentId={item.content_id}
-          onStatusChange={(status) => {
-            if (status !== "none") handleRead();
-          }}
-        />
-      </div>
+      {statusesReady && (
+        <div className="flex-shrink-0 self-center">
+          <WatchButton
+            contentType={item.content_type}
+            contentId={item.content_id}
+            initialStatus={statusMap[`${item.content_type}:${item.content_id}`]?.status}
+            initialRating={statusMap[`${item.content_type}:${item.content_id}`]?.rating}
+            onStatusChange={(status) => {
+              if (status !== "none") handleRead();
+            }}
+          />
+        </div>
+      )}
     </div>
   );
 }
@@ -297,6 +314,8 @@ export default function ActivityFeedPage() {
   const [recsLoading, setRecsLoading] = useState(true);
   const [currentUserId, setCurrentUserId] = useState<string>("");
   const [token, setToken] = useState<string>("");
+  const [statusMap, setStatusMap] = useState<StatusMap>({});
+  const [statusesReady, setStatusesReady] = useState(false);
 
   useEffect(() => {
     const unsubscribe = auth.onAuthStateChanged(async (user) => {
@@ -334,6 +353,33 @@ export default function ActivityFeedPage() {
     });
     return unsubscribe;
   }, []);
+
+  // Bulk-fetch watch statuses for friend items + recommendations
+  useEffect(() => {
+    if (!currentUserId || (!friendItems.length && !recommendations.length)) { setStatusesReady(true); return; }
+    const user = auth.currentUser;
+    if (!user) return;
+    const seen = new Set<string>();
+    const unique = [...friendItems, ...recommendations]
+      .map((i) => ({ content_type: i.content_type, content_id: i.content_id }))
+      .filter(({ content_type, content_id }) => {
+        const key = `${content_type}:${content_id}`;
+        return seen.has(key) ? false : (seen.add(key), true);
+      });
+    const { cached, missing } = getCachedStatuses(user.uid, unique);
+    if (!missing.length) { setStatusMap(cached as StatusMap); return; }
+    user.getIdToken().then((token) =>
+      fetch(`${API_URL}/watchlist/status/bulk`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify(missing),
+      })
+        .then((r) => (r.ok ? r.json() : {}))
+        .then((data) => { mergeCachedStatuses(user.uid, data); setStatusMap({ ...cached, ...data } as StatusMap); })
+        .catch(() => setStatusMap(cached as StatusMap))
+        .finally(() => setStatusesReady(true)),
+    );
+  }, [friendItems, recommendations, currentUserId]);
 
   // Refetch recommendations inbox when a new one arrives via SSE
   useEffect(() => {
@@ -455,6 +501,8 @@ export default function ActivityFeedPage() {
                   key={item.id}
                   item={item}
                   currentUserId={currentUserId}
+                  statusMap={statusMap}
+                  statusesReady={statusesReady}
                 />
               ))}
             </div>
@@ -491,6 +539,8 @@ export default function ActivityFeedPage() {
                   key={item.id}
                   item={item}
                   currentUserId={currentUserId}
+                  statusMap={statusMap}
+                  statusesReady={statusesReady}
                 />
               ))}
             </div>
@@ -526,7 +576,7 @@ export default function ActivityFeedPage() {
           {!recsLoading && recommendations.length > 0 && (
             <div className="flex flex-col gap-3">
               {recommendations.map((rec) => (
-                <RecommendationRow key={rec.id} item={rec} onRead={markRead} onDelete={deleteRec} />
+                <RecommendationRow key={rec.id} item={rec} onRead={markRead} onDelete={deleteRec} statusMap={statusMap} statusesReady={statusesReady} />
               ))}
             </div>
           )}

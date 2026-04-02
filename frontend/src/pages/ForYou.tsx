@@ -10,6 +10,12 @@ import { Link } from "react-router-dom";
 type Tab = "movies" | "tv";
 type Mode = "recent" | "top_rated";
 
+const forYouCache = new Map<string, { movies: Movie[]; shows: Show[]; seedCount: number }>();
+
+export function clearForYouCache() {
+  forYouCache.clear();
+}
+
 const TABS: { key: Tab; label: string }[] = [
   { key: "movies", label: "Movies" },
   { key: "tv", label: "TV Shows" },
@@ -49,6 +55,16 @@ export default function ForYou() {
 
   useEffect(() => {
     if (!currentUser) return;
+    const cacheKey = `${currentUser.uid}:${mode}`;
+    const cached = forYouCache.get(cacheKey);
+    if (cached) {
+      setMovies(cached.movies);
+      setShows(cached.shows);
+      setSeedCount(cached.seedCount);
+      setPage(1);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setPage(1);
     currentUser.getIdToken().then((token) =>
@@ -57,9 +73,13 @@ export default function ForYou() {
       })
         .then((r) => { if (!r.ok) throw new Error(); return r.json(); })
         .then((data) => {
-          setMovies(data.movies ?? []);
-          setShows(data.shows ?? []);
-          setSeedCount(data.seed_count ?? 0);
+          const movies = data.movies ?? [];
+          const shows = data.shows ?? [];
+          const seedCount = data.seed_count ?? 0;
+          setMovies(movies);
+          setShows(shows);
+          setSeedCount(seedCount);
+          forYouCache.set(cacheKey, { movies, shows, seedCount });
         })
         .catch(console.error)
         .finally(() => setLoading(false))

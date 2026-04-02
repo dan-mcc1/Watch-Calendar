@@ -6,6 +6,7 @@ import { useState, useEffect } from "react";
 import { getAuth } from "firebase/auth";
 import { firebaseApp } from "../firebase";
 import WatchButton, { WatchStatus } from "./WatchButton";
+import { getCachedStatuses, mergeCachedStatuses } from "../utils/statusCache";
 
 interface MediaListProps {
   results: {
@@ -394,6 +395,11 @@ export default function MediaList({
         setStatusMap({});
         return;
       }
+      const { cached, missing } = getCachedStatuses(user.uid, items);
+      if (!missing.length) {
+        setStatusMap(cached as Record<string, { status: WatchStatus; rating: number | null }>);
+        return;
+      }
       user.getIdToken().then((token) =>
         fetch(`${API_URL}/watchlist/status/bulk`, {
           method: "POST",
@@ -401,11 +407,14 @@ export default function MediaList({
             Authorization: `Bearer ${token}`,
             "Content-Type": "application/json",
           },
-          body: JSON.stringify(items),
+          body: JSON.stringify(missing),
         })
           .then((r) => (r.ok ? r.json() : {}))
-          .then(setStatusMap)
-          .catch(() => setStatusMap({})),
+          .then((data) => {
+            mergeCachedStatuses(user.uid, data);
+            setStatusMap({ ...cached, ...data } as Record<string, { status: WatchStatus; rating: number | null }>);
+          })
+          .catch(() => setStatusMap(cached as Record<string, { status: WatchStatus; rating: number | null }>)),
       );
     });
     return unsubscribe;

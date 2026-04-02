@@ -8,7 +8,8 @@ import CastBar from "../components/CastBar";
 import { Link } from "react-router-dom";
 import { getAuth } from "firebase/auth";
 import { firebaseApp } from "../firebase";
-import WatchButton from "../components/WatchButton";
+import WatchButton, { WatchStatus } from "../components/WatchButton";
+import { getCachedStatuses, mergeCachedStatuses } from "../utils/statusCache";
 import FavoriteButton from "../components/FavoriteButton";
 import RecommendButton from "../components/RecommendButton";
 import ReviewsSection from "../components/ReviewsSection";
@@ -141,6 +142,9 @@ export default function MovieInfo() {
   usePageTitle(movie?.title);
   const auth = getAuth(firebaseApp);
   const [user, setUser] = useState(auth.currentUser);
+  const [initialStatus, setInitialStatus] = useState<WatchStatus | undefined>(undefined);
+  const [initialRating, setInitialRating] = useState<number | null | undefined>(undefined);
+  const [statusReady, setStatusReady] = useState(false);
   const [externalScores, setExternalScores] = useState<ExternalScores | null>(
     null,
   );
@@ -152,6 +156,33 @@ export default function MovieInfo() {
     });
     return unsubscribe;
   }, [auth]);
+
+  useEffect(() => {
+    if (!user || !movie) return;
+    const items = [{ content_type: "movie", content_id: movie.id }];
+    const { cached, missing } = getCachedStatuses(user.uid, items);
+    if (!missing.length) {
+      setInitialStatus(cached[`movie:${movie.id}`]?.status as WatchStatus);
+      setInitialRating(cached[`movie:${movie.id}`]?.rating ?? null);
+      setStatusReady(true);
+      return;
+    }
+    user.getIdToken().then((token) =>
+      fetch(`${API_URL}/watchlist/status/bulk`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify(missing),
+      })
+        .then((r) => (r.ok ? r.json() : {}))
+        .then((data: Record<string, { status: string; rating: number | null }>) => {
+          mergeCachedStatuses(user.uid, data);
+          setInitialStatus(data[`movie:${movie.id}`]?.status as WatchStatus);
+          setInitialRating(data[`movie:${movie.id}`]?.rating ?? null);
+        })
+        .catch(() => {})
+        .finally(() => setStatusReady(true))
+    );
+  }, [user, movie]);
 
   useEffect(() => {
     async function getData() {
@@ -269,7 +300,7 @@ export default function MovieInfo() {
       <div className="px-4 sm:px-6 mt-6 space-y-8">
         {/* Buttons row */}
         <div className="flex flex-wrap items-center gap-2">
-          {user && <WatchButton contentType="movie" contentId={movie.id} />}
+          {user && statusReady && <WatchButton contentType="movie" contentId={movie.id} initialStatus={initialStatus} initialRating={initialRating} />}
           {user && <FavoriteButton contentType="movie" contentId={movie.id} />}
           {user && (
             <RecommendButton

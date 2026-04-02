@@ -1,10 +1,9 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import type { Show, Movie, CollectionResult } from "../types/calendar";
-import { API_URL, BASE_IMAGE_URL } from "../constants";
+import type { Show, Movie } from "../types/calendar";
+import { API_URL } from "../constants";
 import MediaList from "../components/MediaList";
 import { usePageTitle } from "../hooks/usePageTitle";
-import { Link } from "react-router-dom";
 
 type ActiveTab = "movie" | "tv";
 
@@ -17,6 +16,8 @@ interface GenreList {
   movie: GenreItem[];
   tv: GenreItem[];
 }
+
+let genreCache: GenreList | null = null;
 
 const TABS: { label: string; value: ActiveTab }[] = [
   { label: "Movies", value: "movie" },
@@ -39,17 +40,12 @@ export default function BrowseGenres() {
   const [totalPages, setTotalPages] = useState(1);
   const [loading, setLoading] = useState(false);
 
-  // Collections state
-  const [collections, setCollections] = useState<CollectionResult[]>([]);
-  const [collectionPage, setCollectionPage] = useState(1);
-  const [collectionTotalPages, setCollectionTotalPages] = useState(1);
-  const [collectionsLoading, setCollectionsLoading] = useState(false);
-
-  // Fetch genre list once on mount
+  // Fetch genre list once per session
   useEffect(() => {
+    if (genreCache) { setGenres(genreCache); return; }
     fetch(`${API_URL}/search/genres`)
       .then((r) => r.json())
-      .then((data: GenreList) => setGenres(data))
+      .then((data: GenreList) => { genreCache = data; setGenres(data); })
       .catch(console.error);
   }, []);
 

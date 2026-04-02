@@ -1,19 +1,9 @@
 import { useEffect, useState } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import { BASE_IMAGE_URL, API_URL } from "../constants";
 import type { Collection, Movie } from "../types/calendar";
-import { parseLocalDate } from "../utils/date";
 import { usePageTitle } from "../hooks/usePageTitle";
-import WatchButton from "../components/WatchButton";
-import { getAuth } from "firebase/auth";
-import { firebaseApp } from "../firebase";
-import { onAuthStateChanged } from "firebase/auth";
-
-function getYear(movie: Movie): string | null {
-  return movie.release_date
-    ? String(parseLocalDate(movie.release_date).getFullYear())
-    : null;
-}
+import MediaList from "../components/MediaList";
 
 function formatRuntime(minutes: number) {
   const h = Math.floor(minutes / 60);
@@ -28,15 +18,7 @@ export default function CollectionInfo() {
   const [collection, setCollection] = useState<Collection | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [user, setUser] = useState(getAuth(firebaseApp).currentUser);
   usePageTitle(collection?.name);
-
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(getAuth(firebaseApp), (u) =>
-      setUser(u)
-    );
-    return unsubscribe;
-  }, []);
 
   useEffect(() => {
     async function fetchCollection() {
@@ -45,12 +27,9 @@ export default function CollectionInfo() {
         const res = await fetch(`${API_URL}/collections/${id}`);
         if (!res.ok) throw new Error("Collection not found");
         const data = await res.json();
-        // Sort parts by release date ascending
-        data.parts = (data.parts ?? []).sort((a: Movie, b: Movie) => {
-          const aDate = a.release_date ?? "";
-          const bDate = b.release_date ?? "";
-          return aDate.localeCompare(bDate);
-        });
+        data.parts = (data.parts ?? []).sort((a: Movie, b: Movie) =>
+          (a.release_date ?? "").localeCompare(b.release_date ?? ""),
+        );
         setCollection(data);
       } catch (err: any) {
         setError(err.message ?? "Something went wrong");
@@ -143,106 +122,7 @@ export default function CollectionInfo() {
           <h2 className="text-xl font-semibold text-slate-100 mb-4">
             Films in this Collection
           </h2>
-          <div className="flex flex-col gap-3">
-            {collection.parts.map((movie, index) => {
-              const year = getYear(movie);
-              return (
-                <div
-                  key={movie.id}
-                  className="flex gap-4 bg-slate-800/60 border border-slate-700 hover:border-slate-600 rounded-xl transition-all duration-200 hover:bg-slate-800 hover:shadow-lg hover:shadow-black/30"
-                >
-                  {/* Index + Poster */}
-                  <Link
-                    to={`/movie/${movie.id}`}
-                    className="relative flex-shrink-0 w-36 sm:w-44 overflow-hidden rounded-l-xl"
-                  >
-                    {movie.backdrop_path ? (
-                      <img
-                        src={`${BASE_IMAGE_URL}/w780${movie.backdrop_path}`}
-                        alt=""
-                        className="h-full w-full object-cover"
-                      />
-                    ) : movie.poster_path ? (
-                      <img
-                        src={`${BASE_IMAGE_URL}/w342${movie.poster_path}`}
-                        alt=""
-                        className="h-full w-full object-cover object-top"
-                      />
-                    ) : (
-                      <div className="h-full w-full min-h-[88px] bg-slate-700 flex items-center justify-center">
-                        <svg
-                          className="w-8 h-8 text-slate-500"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          stroke="currentColor"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={1}
-                            d="M15 10l4.553-2.069A1 1 0 0121 8.87v6.26a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
-                          />
-                        </svg>
-                      </div>
-                    )}
-                    <div className="absolute top-2 left-2 w-6 h-6 rounded-full bg-slate-900/80 flex items-center justify-center">
-                      <span className="text-[10px] font-bold text-slate-200">
-                        {index + 1}
-                      </span>
-                    </div>
-                  </Link>
-
-                  {/* Info */}
-                  <div className="flex flex-col justify-center gap-1.5 py-3 pr-3 flex-1 min-w-0">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <Link to={`/movie/${movie.id}`}>
-                          <h3 className="font-semibold text-slate-100 hover:text-white transition-colors line-clamp-1 text-sm sm:text-base">
-                            {movie.title}
-                          </h3>
-                        </Link>
-                        <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                          {year && (
-                            <span className="text-xs text-slate-500">{year}</span>
-                          )}
-                          {movie.runtime != null && movie.runtime > 0 && (
-                            <span className="flex items-center gap-1 text-xs text-slate-500">
-                              <span className="text-slate-700">·</span>
-                              {formatRuntime(movie.runtime)}
-                            </span>
-                          )}
-                          {movie.vote_average != null && movie.vote_average > 0 && (
-                            <span className="flex items-center gap-1 text-xs text-yellow-400 font-medium">
-                              <span className="text-slate-700">·</span>
-                              <svg className="w-3 h-3" viewBox="0 0 24 24" fill="currentColor">
-                                <path d="M11.48 3.499a.562.562 0 011.04 0l2.125 5.111a.563.563 0 00.475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 00-.182.557l1.285 5.385a.562.562 0 01-.84.61l-4.725-2.885a.563.563 0 00-.586 0L6.982 20.54a.562.562 0 01-.84-.61l1.285-5.386a.562.562 0 00-.182-.557l-4.204-3.602a.563.563 0 01.321-.988l5.518-.442a.563.563 0 00.475-.345L11.48 3.5z" />
-                              </svg>
-                              {movie.vote_average.toFixed(1)}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                      {user && (
-                        <div className="flex-shrink-0 hidden sm:block">
-                          <WatchButton contentType="movie" contentId={movie.id} />
-                        </div>
-                      )}
-                    </div>
-                    {movie.overview && (
-                      <p className="text-slate-400 text-xs sm:text-sm line-clamp-2 leading-relaxed">
-                        {movie.overview}
-                      </p>
-                    )}
-                    {user && (
-                      <div className="sm:hidden mt-1">
-                        <WatchButton contentType="movie" contentId={movie.id} />
-                      </div>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+          <MediaList results={{ movies: collection.parts, shows: [], people: [] }} paginated />
         </div>
       </div>
     </div>

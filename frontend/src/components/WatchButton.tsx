@@ -4,6 +4,9 @@ import { firebaseApp } from "../firebase";
 import { API_URL } from "../constants";
 import StarRating from "./StarRating";
 import { clearDashboardCache } from "../utils/dashboardCache";
+import { clearWatchlistCache } from "../utils/watchlistCache";
+import { clearForYouCache } from "../pages/ForYou";
+import { updateCachedStatus } from "../utils/statusCache";
 
 export type WatchStatus =
   | "none"
@@ -232,11 +235,15 @@ export default function WatchButton({
         });
       }
 
+      const newRating = targetStatus !== "Watched" ? null : rating;
       setWatchStatus(targetStatus);
       onStatusChange?.(targetStatus);
       if (targetStatus !== "Watched") setRating(null);
       setMenuOpen(false);
       clearDashboardCache();
+      clearWatchlistCache();
+      clearForYouCache();
+      if (user) updateCachedStatus(user.uid, contentType, contentId, targetStatus, newRating);
     } catch (err) {
       console.error(err);
       alert("Failed to update status");
@@ -264,6 +271,9 @@ export default function WatchButton({
       });
       setRating(newRating);
       clearDashboardCache();
+      clearWatchlistCache();
+      clearForYouCache();
+      if (user) updateCachedStatus(user.uid, contentType, contentId, watchStatus, newRating);
     } catch (err) {
       console.error(err);
     } finally {

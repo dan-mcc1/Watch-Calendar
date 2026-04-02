@@ -7,7 +7,8 @@ import SeasonInfo from "../components/SeasonInfo";
 import WhereToWatch from "../components/WhereToWatch";
 import CastBar from "../components/CastBar";
 import { Link } from "react-router-dom";
-import WatchButton from "../components/WatchButton";
+import WatchButton, { WatchStatus } from "../components/WatchButton";
+import { getCachedStatuses, mergeCachedStatuses } from "../utils/statusCache";
 import FavoriteButton from "../components/FavoriteButton";
 import RecommendButton from "../components/RecommendButton";
 import ReviewsSection from "../components/ReviewsSection";
@@ -127,6 +128,9 @@ export default function ShowInfo() {
   const [error, setError] = useState<string | null>(null);
   const auth = getAuth(firebaseApp);
   const [user, setUser] = useState(auth.currentUser);
+  const [initialStatus, setInitialStatus] = useState<WatchStatus | undefined>(undefined);
+  const [initialRating, setInitialRating] = useState<number | null | undefined>(undefined);
+  const [statusReady, setStatusReady] = useState(false);
   const [externalScores, setExternalScores] = useState<ExternalScores | null>(
     null,
   );
@@ -139,6 +143,33 @@ export default function ShowInfo() {
     });
     return unsubscribe;
   }, [auth]);
+
+  useEffect(() => {
+    if (!user || !show) return;
+    const items = [{ content_type: "tv", content_id: show.id }];
+    const { cached, missing } = getCachedStatuses(user.uid, items);
+    if (!missing.length) {
+      setInitialStatus(cached[`tv:${show.id}`]?.status as WatchStatus);
+      setInitialRating(cached[`tv:${show.id}`]?.rating ?? null);
+      setStatusReady(true);
+      return;
+    }
+    user.getIdToken().then((token) =>
+      fetch(`${API_URL}/watchlist/status/bulk`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify(missing),
+      })
+        .then((r) => (r.ok ? r.json() : {}))
+        .then((data: Record<string, { status: string; rating: number | null }>) => {
+          mergeCachedStatuses(user.uid, data);
+          setInitialStatus(data[`tv:${show.id}`]?.status as WatchStatus);
+          setInitialRating(data[`tv:${show.id}`]?.rating ?? null);
+        })
+        .catch(() => {})
+        .finally(() => setStatusReady(true))
+    );
+  }, [user, show]);
 
   useEffect(() => {
     if (!id) return;
@@ -259,7 +290,7 @@ export default function ShowInfo() {
       <div className="px-4 sm:px-6 mt-6 space-y-8">
         {/* Buttons row */}
         <div className="flex flex-wrap items-center gap-2">
-          {user && <WatchButton contentType="tv" contentId={show.id} onStatusChange={() => setEpisodeRefreshKey((k) => k + 1)} />}
+          {user && statusReady && <WatchButton contentType="tv" contentId={show.id} initialStatus={initialStatus} initialRating={initialRating} onStatusChange={() => setEpisodeRefreshKey((k) => k + 1)} />}
           {user && <FavoriteButton contentType="tv" contentId={show.id} />}
           {user && (
             <RecommendButton

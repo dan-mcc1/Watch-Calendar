@@ -6,6 +6,7 @@ import { getAuth } from "firebase/auth";
 import { useNavigate } from "react-router-dom";
 import MediaCard from "../components/MediaCard";
 import { usePageTitle } from "../hooks/usePageTitle";
+import { getCachedWatchlist, setCachedWatchlist, clearWatchlistCache } from "../utils/watchlistCache";
 
 type TabType = "all" | "movies" | "tv";
 type SortType = "default" | "title_asc" | "title_desc" | "date_desc" | "date_asc" | "popularity_desc" | "tmdb_rating_desc" | "tmdb_rating_asc";
@@ -71,6 +72,7 @@ export default function Watchlist() {
         movies: type === "movie" ? prev.movies.filter((m) => m.id !== content_id) : prev.movies,
         shows: type === "tv" ? prev.shows.filter((s) => s.id !== content_id) : prev.shows,
       }));
+      clearWatchlistCache();
     } catch (err) {
       console.error(err);
     }
@@ -79,6 +81,12 @@ export default function Watchlist() {
   useEffect(() => {
     const unsubscribe = auth.onAuthStateChanged(async (user) => {
       if (!user) { alert("You must be signed in."); return; }
+      const cached = getCachedWatchlist(user.uid);
+      if (cached) {
+        setResults(cached);
+        setLoading(false);
+        return;
+      }
       try {
         const res = await fetch(`${API_URL}/watchlist`, {
           headers: {
@@ -88,7 +96,9 @@ export default function Watchlist() {
         });
         if (!res.ok) throw new Error("Failed to fetch");
         const data = await res.json();
-        setResults({ movies: data.movies ?? [], shows: data.shows ?? [] });
+        const watchlist = { movies: data.movies ?? [], shows: data.shows ?? [] };
+        setResults(watchlist);
+        setCachedWatchlist(user.uid, watchlist);
       } catch (err) {
         console.error(err);
       } finally {
