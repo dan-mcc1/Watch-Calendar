@@ -1,6 +1,6 @@
 {
-  "name": "Watch Calendar",
-  "short_name": "WatchCal",
+  "name": "Release Radar",
+  "short_name": "ReleaseRadar",
   "description": "Track movies and TV shows you want to watch",
   "start_url": "/",
   "display": "standalone",
