@@ -37,7 +37,7 @@ A full-stack web application for tracking your watched content, managing watchli
 1. Clone the repository
    ```bash
    git clone https://github.com/dan-mcc1/ReleaseRadar.git
-   cd Watch-Calendar
+   cd ReleaseRadar
    ```
 2. Setup backend
    ```bash

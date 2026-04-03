@@ -60,7 +60,7 @@ export default function InstallBanner() {
                 Add to Home Screen
               </p>
               <p className="text-slate-400 text-xs">
-                Use Watch Calendar like an app
+                Use Release Radar like an app
               </p>
             </div>
           </div>
