@@ -108,12 +108,12 @@ def get_ical_feed(token: str, db: Session = Depends(get_db)):
 
     # ── Build the iCalendar object ────────────────────────────────────────────
     cal = Calendar()
-    cal.add("prodid", "-//Watch Calendar//watchcalendar//EN")
+    cal.add("prodid", "-//ReleaseRadar//releaseradar//EN")
     cal.add("version", "2.0")
     cal.add("method", "PUBLISH")
     cal.add("calscale", "GREGORIAN")
-    cal.add("x-wr-calname", "Watch Calendar")
-    cal.add("x-wr-caldesc", "TV episodes and movies from your Watch Calendar")
+    cal.add("x-wr-calname", "Release Radar")
+    cal.add("x-wr-caldesc", "TV episodes and movies from Release Radar")
     cal.add("x-wr-timezone", "UTC")
     cal.add("x-published-ttl", "PT12H")
 
@@ -191,7 +191,7 @@ def get_ical_feed(token: str, db: Session = Depends(get_db)):
                 event = Event()
                 event.add(
                     "uid",
-                    f"tv-{ep.show_id}-s{ep.season_number}e{ep.episode_number}@watchcalendar",
+                    f"tv-{ep.show_id}-s{ep.season_number}e{ep.episode_number}@releaseradar",
                 )
                 event.add("dtstamp", now)
                 event.add("summary", summary)
@@ -219,7 +219,7 @@ def get_ical_feed(token: str, db: Session = Depends(get_db)):
             try:
                 dtstart, dtend = _allday_event(movie.release_date)
                 event = Event()
-                event.add("uid", f"movie-{movie.id}@watchcalendar")
+                event.add("uid", f"movie-{movie.id}@releaseradar")
                 event.add("dtstamp", now)
                 event.add("summary", movie.title)
                 event.add("dtstart", dtstart)

@@ -436,7 +436,7 @@ export default function NavBar() {
                 >
                   <path d="M8 5v14l11-7z" />
                 </svg>
-                <span className="text-xl font-bold">Watch Calendar</span>
+                <span className="text-xl font-bold">Release Radar</span>
               </a>
             </div>
 

@@ -241,7 +241,7 @@ const SignIn: React.FC = () => {
       <div className="w-full max-w-md">
         {/* Logo / Branding */}
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-white mb-1">Watch Calendar</h1>
+          <h1 className="text-3xl font-bold text-white mb-1">Release Radar</h1>
           <p className="text-slate-400 text-sm">
             {isRegistering
               ? "Create your account to get started"
