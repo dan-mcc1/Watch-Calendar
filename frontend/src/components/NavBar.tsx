@@ -698,7 +698,7 @@ export default function NavBar() {
               onChange={(e) => setSearchQuery(e.target.value)}
               onKeyDown={(e) => e.key === "Escape" && setDropdownOpen(false)}
               placeholder="Search..."
-              className="pl-9 pr-8 w-full py-2 rounded-md bg-primary-700 border border-primary-800/50 text-white text-sm placeholder-neutral-300 focus:outline-none focus:ring-2 focus:ring-neutral-950/50 transition"
+              className="pl-9 pr-8 w-full py-2 rounded-md bg-primary-700 border border-primary-800/50 text-white text-[16px] placeholder-neutral-300 focus:outline-none focus:ring-2 focus:ring-neutral-950/50 transition"
             />
             {searchQuery && (
               <button
