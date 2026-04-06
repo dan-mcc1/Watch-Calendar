@@ -7,6 +7,7 @@ from app.db.session import get_db
 from app.dependencies.auth import get_current_user
 from app.models.user import User
 from app.models.watchlist import Watchlist
+from app.models.currently_watching import CurrentlyWatching
 from app.models.watched import Watched
 from app.models.movie import Movie
 from app.models.show import Show
@@ -87,61 +88,82 @@ def _build_items_for_window(db: Session, user_id: str, days: int) -> list:
     end = today + timedelta(days=days)
     upcoming = []
 
-    movie_ids = [
-        r.content_id
-        for r in db.query(Watchlist.content_id)
-        .filter_by(user_id=user_id, content_type="movie")
-        .all()
-    ]
-    for mid in movie_ids:
-        m = db.query(Movie).filter_by(id=mid).first()
-        if m and m.release_date:
-            try:
-                rd = date.fromisoformat(str(m.release_date))
-                if today <= rd < end:
-                    upcoming.append(
-                        {
-                            "title": m.title,
-                            "date": str(rd),
-                            "content_type": "movie",
-                            "content_id": mid,
-                            "poster_path": m.poster_path,
-                        }
-                    )
-            except (ValueError, TypeError):
-                pass
-
-    show_ids = [
-        r.content_id
-        for r in db.query(Watchlist.content_id)
-        .filter_by(user_id=user_id, content_type="tv")
-        .all()
-    ]
-    for sid in show_ids:
-        show = db.query(Show).filter_by(id=sid).first()
-        if not show:
-            continue
-        episodes = (
-            db.query(Episode)
-            .filter(
-                Episode.show_id == sid,
-                Episode.air_date >= today,
-                Episode.air_date < end,
-            )
-            .all()
+    movies = (
+        db.query(Movie)
+        .join(Watchlist, Watchlist.content_id == Movie.id)
+        .filter(
+            Watchlist.user_id == user_id,
+            Watchlist.content_type == "movie",
+            Movie.release_date >= today,
+            Movie.release_date < end,
         )
-        for ep in episodes:
-            upcoming.append(
-                {
-                    "title": f"{show.name} S{ep.season_number:02d}E{ep.episode_number:02d}"
-                    + (f" — {ep.name}" if ep.name else ""),
-                    "date": str(ep.air_date),
-                    "air_time": format_air_time(show.air_time, show.air_timezone),
-                    "content_type": "tv",
-                    "content_id": sid,
-                    "poster_path": show.poster_path,
-                }
-            )
+        .all()
+    )
+
+    for m in movies:
+        upcoming.append(
+            {
+                "title": m.title,
+                "date": str(m.release_date),
+                "content_type": "movie",
+                "content_id": m.id,
+                "poster_path": m.poster_path,
+            }
+        )
+
+    # 📺 Episodes
+    episodes = (
+        db.query(Episode, Show)
+        .join(Show, Show.id == Episode.show_id)
+        .join(Watchlist, Watchlist.content_id == Show.id)
+        .filter(
+            Watchlist.user_id == user_id,
+            Watchlist.content_type == "tv",
+            Episode.air_date >= today,
+            Episode.air_date < end,
+        )
+        .all()
+    )
+    for ep, show in episodes:
+        upcoming.append(
+            {
+                "title": f"{show.name} S{ep.season_number:02d}E{ep.episode_number:02d}"
+                + (f" — {ep.name}" if ep.name else ""),
+                "date": str(ep.air_date),
+                "air_time": format_air_time(show.air_time, show.air_timezone),
+                "content_type": "tv",
+                "content_id": show.id,
+                "poster_path": show.poster_path,
+                "episode_type": ep.episode_type,
+            }
+        )
+
+    watching_episodes = (
+        db.query(Episode, Show)
+        .join(Show, Show.id == Episode.show_id)
+        .join(CurrentlyWatching, CurrentlyWatching.content_id == Show.id)
+        .filter(
+            CurrentlyWatching.user_id == user_id,
+            CurrentlyWatching.content_type == "tv",
+            Episode.air_date >= today,
+            Episode.air_date < end,
+        )
+        .all()
+    )
+
+    for ep, show in watching_episodes:
+        upcoming.append(
+            {
+                "title": f"{show.name} S{ep.season_number:02d}E{ep.episode_number:02d}"
+                + (f" — {ep.name}" if ep.name else ""),
+                "date": str(ep.air_date),
+                "air_time": format_air_time(show.air_time, show.air_timezone),
+                "content_type": "tv",
+                "content_id": show.id,
+                "poster_path": show.poster_path,
+                "episode_type": ep.episode_type,
+            }
+        )
 
     return upcoming
 
@@ -285,7 +307,12 @@ def send_digest(
     upcoming = _build_items_for_window(db, uid, window)
 
     background_tasks.add_task(
-        send_notification_email, user.email, user.username or "", upcoming
+        send_notification_email,
+        user.email,
+        user.username or "",
+        upcoming,
+        uid,
+        frequency=freq,
     )
     return {"message": "Digest email queued"}
 

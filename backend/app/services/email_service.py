@@ -1,7 +1,8 @@
 import hmac
 import hashlib
-from datetime import date
+from datetime import datetime
 import resend
+from collections import defaultdict
 from app.config import settings
 
 TMDB_IMAGE_BASE = "https://image.tmdb.org/t/p/w185"
@@ -19,8 +20,9 @@ def _unsubscribe_url(uid: str) -> str:
 def _format_date(date_str: str) -> str:
     """Format ISO date string as 'Month Day, Year'."""
     try:
-        d = date.fromisoformat(str(date_str))
-        return d.strftime("%B %-d, %Y")
+        dt = datetime.strptime(date_str, "%Y-%m-%d")
+        # On Linux/macOS, %-d removes leading zero; on Windows use dt.day
+        return f"{dt.strftime('%A, %B')} {dt.day}, {dt.year}"
     except Exception:
         return str(date_str)
 
@@ -55,6 +57,7 @@ def format_air_time(air_time: str | None, air_timezone: str | None) -> str | Non
 
 
 # ── Shared HTML building blocks ───────────────────────────────────────────────
+
 
 def _email_wrapper(body_html: str, uid: str) -> str:
     unsubscribe_url = _unsubscribe_url(uid)
@@ -113,8 +116,9 @@ def _poster_img(poster_path: str | None, alt: str, content_url: str) -> str:
 
 # ── Daily / weekly digest ─────────────────────────────────────────────────────
 
+
 def _digest_item_row(item: dict) -> str:
-    """Single card row for a digest item."""
+    """Single card row for a digest item with proper spacing and badge."""
     content_type = item.get("content_type", "movie")
     content_id = item.get("content_id")
     content_url = (
@@ -122,23 +126,41 @@ def _digest_item_row(item: dict) -> str:
         if content_id
         else settings.FRONTEND_URL
     )
-    poster = _poster_img(item.get("poster_path"), item["title"], content_url)
 
-    air_time = item.get("air_time")
-    if air_time:
-        time_badge = (
-            f'<span style="display:inline-block;background:#1e3a8a;color:#93c5fd;'
-            f'font-size:11px;font-weight:600;padding:2px 8px;border-radius:999px;'
-            f'margin-left:6px;">{air_time}</span>'
-        )
-    else:
-        time_badge = (
-            f'<span style="display:inline-block;background:#1e3a5f;color:#7dd3fc;'
-            f'font-size:11px;font-weight:600;padding:2px 8px;border-radius:999px;'
-            f'margin-left:6px;">Streaming</span>'
+    # Poster with inline-block + right margin
+    poster_path = item.get("poster_path")
+    poster = (
+        f'<a href="{content_url}" style="display:inline-block;flex-shrink:0;margin-right:12px;">'
+        f'<img src="{TMDB_IMAGE_BASE}{poster_path}" alt="{item["title"]}" width="56" height="84"'
+        f' style="border-radius:6px;object-fit:cover;display:block;" /></a>'
+        if poster_path
+        else ""
+    )
+
+    # Time badge
+    time_text = item.get("air_time") or (
+        "Theaters" if content_type == "movie" else "Streaming"
+    )
+    time_color = "#1e3a8a" if content_type == "movie" else "#1e3a5f"
+
+    time_badge = (
+        f'<span style="display:inline-block;background:{time_color};color:#93c5fd;'
+        f"font-size:11px;font-weight:600;padding:2px 8px;border-radius:999px;"
+        f'margin-left:6px;">{time_text}</span>'
+    )
+
+    special_badge = ""
+    if content_type == "tv" and item.get("episode_type"):
+        # Human-readable text, capitalize words and replace underscores
+        ep_type_text = item["episode_type"].replace("_", " ").title()
+        special_badge = (
+            f'<span style="display:inline-block;background:#d97706;color:#fff;'
+            f"font-size:11px;font-weight:600;padding:2px 8px;border-radius:999px;"
+            f'margin-left:6px;">{ep_type_text}</span>'
         )
 
-    has_poster = bool(item.get("poster_path"))
+    # Flex layout with gap
+    has_poster = bool(poster_path)
     layout_style = "display:flex;align-items:flex-start;gap:14px;" if has_poster else ""
 
     return f"""
@@ -149,47 +171,67 @@ def _digest_item_row(item: dict) -> str:
     <a href="{content_url}" style="color:#f1f5f9;font-size:15px;font-weight:600;
        text-decoration:none;display:block;margin-bottom:3px;">{item["title"]}</a>
     <span style="color:#64748b;font-size:13px;">{_format_date(item["date"])}</span>
-    {time_badge}
+    {time_badge}{special_badge}
   </div>
 </div>"""
 
 
 def send_notification_email(
-    to_email: str, username: str, upcoming_items: list, uid: str = "", frequency: str = "daily"
+    to_email: str,
+    username: str,
+    upcoming_items: list,
+    uid: str = "",
+    frequency: str = "daily",
 ):
-    """Send a digest email of upcoming episodes/releases."""
     if not upcoming_items:
         return
 
+    # 🧠 Decide labels
     if frequency == "weekly":
-        # Group items by date
-        from collections import defaultdict
+        subject = "Release Radar — Your Weekly Digest"
+        intro = "Here's everything releasing this week that's on your radar:"
+        group_by_day = True
+    elif frequency == "monthly":
+        subject = "Release Radar — Your Monthly Digest"
+        intro = "Here's everything releasing this month that's on your radar:"
+        group_by_day = True
+    else:
+        count = len(upcoming_items)
+        subject = (
+            "Release Radar — Releasing Today"
+            if count > 1
+            else f"Release Radar — {upcoming_items[0]['title']} is out today"
+        )
+        today_str = _format_date(upcoming_items[0]["date"]) if upcoming_items else ""
+        intro = f"Here's what's out today — {today_str} on your Release Radar:"
+        group_by_day = False
+
+    # 🧱 Build HTML
+    if group_by_day:
         by_day: dict[str, list] = defaultdict(list)
         for item in upcoming_items:
             by_day[item["date"]].append(item)
 
         items_html = ""
         for day_date in sorted(by_day.keys()):
-            day_items = by_day[day_date]
             items_html += f"""
 <p style="margin:20px 0 8px;color:#93c5fd;font-size:13px;font-weight:700;
-          text-transform:uppercase;letter-spacing:0.8px;">{_format_date(day_date)}</p>"""
-            for item in day_items:
+          text-transform:uppercase;letter-spacing:0.8px;">
+  {_format_date(day_date)}
+</p>"""
+            for item in by_day[day_date]:
                 items_html += _digest_item_row(item)
-
-        subject = "Release Radar — Your Weekly Digest"
-        intro = "Here's everything releasing this week that's on your radar:"
     else:
         items_html = "".join(_digest_item_row(item) for item in upcoming_items)
-        count = len(upcoming_items)
-        subject = "Release Radar — Releasing Today" if count > 1 else f"Release Radar — {upcoming_items[0]['title']} is out today"
-        intro = "Here's what's out today on your Release Radar:"
 
+    # 📧 Email body
     body = f"""
 <h2 style="margin:0 0 4px;color:#f1f5f9;font-size:20px;font-weight:700;">
   Hi {username or 'there'} 👋
 </h2>
-<p style="margin:0 0 20px;color:#94a3b8;font-size:14px;">{intro}</p>
+<p style="margin:0 0 20px;color:#94a3b8;font-size:14px;">
+  {intro}
+</p>
 {items_html}
 <div style="text-align:center;margin-top:24px;">
   <a href="{settings.FRONTEND_URL}"
@@ -203,6 +245,7 @@ def send_notification_email(
 
 
 # ── Season premiere alert ─────────────────────────────────────────────────────
+
 
 def send_season_premiere_email(
     to_email: str, username: str, alerts: list, uid: str = ""
@@ -221,10 +264,16 @@ def send_season_premiere_email(
     def _alert_card(a: dict) -> str:
         season_label = a.get("season_name") or f"Season {a['season_number']}"
         show_id = a.get("show_id")
-        content_url = f"{settings.FRONTEND_URL}/tv/{show_id}" if show_id else settings.FRONTEND_URL
+        content_url = (
+            f"{settings.FRONTEND_URL}/tv/{show_id}"
+            if show_id
+            else settings.FRONTEND_URL
+        )
         poster = _poster_img(a.get("poster_path"), a["show_name"], content_url)
         has_poster = bool(a.get("poster_path"))
-        layout_style = "display:flex;align-items:flex-start;gap:14px;" if has_poster else ""
+        layout_style = (
+            "display:flex;align-items:flex-start;gap:14px;" if has_poster else ""
+        )
         return f"""
 <div style="{layout_style}background:#0f172a;border:1px solid #334155;
             border-radius:10px;padding:14px;margin-bottom:10px;">
@@ -274,6 +323,7 @@ def send_season_premiere_email(
 
 # ── Recommendation email ──────────────────────────────────────────────────────
 
+
 def send_recommendation_email(
     to_email: str,
     to_username: str,
@@ -296,7 +346,7 @@ def send_recommendation_email(
             f'<a href="{content_url}">'
             f'<img src="{TMDB_IMAGE_BASE}{poster_path}" alt="{content_title}"'
             f' width="100" height="150" style="border-radius:10px;object-fit:cover;display:inline-block;" />'
-            f'</a></div>'
+            f"</a></div>"
         )
 
     message_block = ""
@@ -305,7 +355,7 @@ def send_recommendation_email(
             f'<div style="background:#0f172a;border-left:3px solid #3b82f6;'
             f'border-radius:0 8px 8px 0;padding:12px 16px;margin:16px 0;">'
             f'<p style="margin:0;color:#94a3b8;font-size:14px;font-style:italic;">"{message}"</p>'
-            f'</div>'
+            f"</div>"
         )
 
     body = f"""
