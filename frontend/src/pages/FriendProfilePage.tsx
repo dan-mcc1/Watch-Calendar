@@ -245,27 +245,29 @@ export default function FriendProfilePage() {
     <div className="w-full max-w-6xl mx-auto px-4 py-8 space-y-8">
       {/* Header */}
       <div className="bg-primary-700 rounded-lg text-white overflow-hidden">
-        <div className="flex items-center gap-6 p-6">
-          <div className="w-24 h-24 rounded-full bg-neutral-600 flex items-center justify-center text-3xl font-bold text-neutral-300 border-2 border-white/20">
-            {profile.username[0].toUpperCase()}
-          </div>
-          <div className="flex-1">
-            <h1 className="text-2xl font-bold">@{profile.username}</h1>
-            {profile.bio && (
-              <p className="text-neutral-300 text-sm mt-1">{profile.bio}</p>
-            )}
-            {!profile.is_friend &&
-              !profile.is_following &&
-              profile.profile_visibility === "friends_only" && (
+        <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-6">
+          <div className="flex items-center gap-4 sm:gap-6 flex-1 min-w-0">
+            <div className="w-20 h-20 sm:w-24 sm:h-24 shrink-0 rounded-full bg-neutral-600 flex items-center justify-center text-3xl font-bold text-neutral-300 border-2 border-white/20">
+              {profile.username[0].toUpperCase()}
+            </div>
+            <div className="flex-1 min-w-0">
+              <h1 className="text-2xl font-bold">@{profile.username}</h1>
+              {profile.bio && (
+                <p className="text-neutral-300 text-sm mt-1">{profile.bio}</p>
+              )}
+              {!profile.is_friend &&
+                !profile.is_following &&
+                profile.profile_visibility === "friends_only" && (
+                  <p className="text-neutral-300 text-sm mt-1">
+                    Add this person as a friend to see their lists.
+                  </p>
+                )}
+              {!profile.is_friend && profile.profile_visibility === "private" && (
                 <p className="text-neutral-300 text-sm mt-1">
-                  Add this person as a friend to see their lists.
+                  This account is private.
                 </p>
               )}
-            {!profile.is_friend && profile.profile_visibility === "private" && (
-              <p className="text-neutral-300 text-sm mt-1">
-                This account is private.
-              </p>
-            )}
+            </div>
           </div>
 
           {!profile.is_friend &&

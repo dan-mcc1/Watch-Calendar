@@ -252,7 +252,11 @@ export default function MovieInfo() {
   if (!movie) return <p className="text-neutral-400 p-6">Movie not found.</p>;
 
   const year = movie.release_date
-    ? formatLocalDate(movie.release_date, { year: "numeric", month: "long", day: "numeric" })
+    ? formatLocalDate(movie.release_date, {
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      })
     : null;
   const trailer =
     movie.videos?.results?.find(
@@ -361,7 +365,7 @@ export default function MovieInfo() {
 
         {/* Stat boxes */}
         <div className="flex flex-wrap gap-3">
-          {year && <StatBox label="Year" value={year} />}
+          {year && <StatBox label="Release Date" value={year} />}
           {movie.runtime > 0 && (
             <StatBox label="Runtime" value={formatRuntime(movie.runtime)} />
           )}
