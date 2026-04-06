@@ -263,7 +263,7 @@ export default function Watched() {
           <select
             value={sort}
             onChange={(e) => setSort(e.target.value as SortType)}
-            className="text-sm bg-neutral-800 border border-neutral-700 text-neutral-300 rounded-lg px-3 py-2 focus:outline-none focus:border-neutral-500"
+            className="w-28 sm:w-auto shrink-0 text-sm bg-neutral-800 border border-neutral-700 text-neutral-300 rounded-lg px-3 py-2 focus:outline-none focus:border-neutral-500"
           >
             <option value="default">Sort: Default</option>
             <option value="title_asc">Title: A → Z</option>
