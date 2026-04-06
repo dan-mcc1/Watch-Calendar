@@ -692,14 +692,24 @@ export default function NavBar() {
               </svg>
             </span>
             <input
-              type="search"
+              type="text"
               enterKeyHint="search"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               onKeyDown={(e) => e.key === "Escape" && setDropdownOpen(false)}
               placeholder="Search..."
-              className="pl-9 w-full py-2 rounded-md bg-primary-700 border border-primary-800/50 text-white text-sm placeholder-neutral-300 focus:outline-none focus:ring-2 focus:ring-neutral-950/50 transition"
+              className="pl-9 pr-8 w-full py-2 rounded-md bg-primary-700 border border-primary-800/50 text-white text-sm placeholder-neutral-300 focus:outline-none focus:ring-2 focus:ring-neutral-950/50 transition"
             />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery("")}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-white"
+                aria-label="Clear search"
+              >
+                <XMarkIcon className="w-4 h-4" />
+              </button>
+            )}
           </form>
 
           {/* Dashboard */}
