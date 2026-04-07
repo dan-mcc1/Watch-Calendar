@@ -22,6 +22,8 @@ def add_episode_watched(
     Mark an episode as watched.
     Ensures the episode row exists in the episode table (fetching from TMDB
     if needed) and links episode_watched to it via episode_id.
+    After recording the episode, auto-moves the show to Watched if all episodes
+    have now been seen.
     """
     existing = (
         db.query(EpisodeWatched)
@@ -52,6 +54,9 @@ def add_episode_watched(
     db.add(entry)
     db.commit()
     db.refresh(entry)
+
+    _maybe_auto_complete_show(db, user_id, show_id)
+
     return entry
 
 
@@ -132,6 +137,9 @@ def add_season_watched(db: Session, user_id: str, show_id: int, season_number: i
                 )
             )
     db.commit()
+
+    _maybe_auto_complete_show(db, user_id, show_id)
+
     return {"message": f"Season {season_number} marked as watched"}
 
 
@@ -293,3 +301,61 @@ def get_watched_episodes_by_show(db: Session, user_id: str, show_id: int):
         }
         for item in items
     ]
+
+
+def _maybe_auto_complete_show(db: Session, user_id: str, show_id: int) -> bool:
+    """
+    After marking episode(s) as watched, auto-move the show to Watched status
+    if all episodes have been seen. Returns True if auto-completed.
+    Only triggers if the show is currently in Watchlist or Currently Watching.
+    """
+    from app.models.watchlist import Watchlist
+    from app.models.currently_watching import CurrentlyWatching
+
+    in_watchlist = (
+        db.query(Watchlist)
+        .filter_by(user_id=user_id, content_type="tv", content_id=show_id)
+        .first()
+    )
+    in_currently_watching = (
+        db.query(CurrentlyWatching)
+        .filter_by(user_id=user_id, content_type="tv", content_id=show_id)
+        .first()
+    )
+    if not in_watchlist and not in_currently_watching:
+        return False
+
+    # Quick count check — skip expensive TMDB sync if episodes are clearly remaining
+    stored_count = (
+        db.query(Episode)
+        .filter(Episode.show_id == show_id, Episode.season_number > 0)
+        .count()
+    )
+    watched_count = (
+        db.query(EpisodeWatched)
+        .filter_by(user_id=user_id, show_id=show_id)
+        .count()
+    )
+    if watched_count < stored_count:
+        return False
+
+    # Full check — may sync unseen seasons from TMDB to confirm nothing is left
+    result = get_next_unwatched_episode(db, user_id, show_id)
+    if not result.get("finished"):
+        return False
+
+    from app.services.watched_service import add_to_watched
+    from app.services.watchlist_service import remove_from_watchlist
+    from app.services.currently_watching_service import remove_from_currently_watching
+
+    # Add to Watched first so the subsequent removes see it still tracked
+    # and leave tracking_count unchanged
+    add_to_watched(db, user_id, "tv", show_id)
+
+    if in_watchlist:
+        remove_from_watchlist(db, user_id, "tv", show_id)
+    if in_currently_watching:
+        remove_from_currently_watching(db, user_id, "tv", show_id)
+
+    print(f"[auto-complete] Show {show_id} auto-moved to Watched for user {user_id}")
+    return True

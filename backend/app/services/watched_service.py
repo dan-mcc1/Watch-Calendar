@@ -256,10 +256,6 @@ def remove_from_watched(db: Session, user_id: str, content_type: str, content_id
     )
     if entry:
         db.delete(entry)
-        if content_type == "tv":
-            db.query(EpisodeWatched).filter_by(
-                user_id=user_id, show_id=content_id
-            ).delete()
 
         # Only decrement tracking_count if not still on any other list
         still_tracked = (

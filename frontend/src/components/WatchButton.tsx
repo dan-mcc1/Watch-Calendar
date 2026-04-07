@@ -21,6 +21,8 @@ interface WatchButtonProps {
   initialStatus?: WatchStatus;
   initialRating?: number | null;
   onStatusChange?: (status: WatchStatus) => void;
+  /** Increment to silently re-fetch status in the background (no loading spinner). */
+  refreshKey?: number;
 }
 
 // ── Icons ──────────────────────────────────────────────────────────────────
@@ -120,6 +122,7 @@ export default function WatchButton({
   initialStatus,
   initialRating,
   onStatusChange,
+  refreshKey,
 }: WatchButtonProps) {
   const auth = getAuth(firebaseApp);
   const [watchStatus, setWatchStatus] = useState<WatchStatus>(
@@ -162,9 +165,9 @@ export default function WatchButton({
     return unsubscribe;
   }, [contentId]);
 
-  async function fetchStatus(user: User) {
+  async function fetchStatus(user: User, silent = false) {
     try {
-      setStatusLoading(true);
+      if (!silent) setStatusLoading(true);
       const res = await fetch(
         `${API_URL}/watchlist/${contentType}/${contentId}/status`,
         {
@@ -178,9 +181,17 @@ export default function WatchButton({
     } catch (err) {
       console.error(err);
     } finally {
-      setStatusLoading(false);
+      if (!silent) setStatusLoading(false);
     }
   }
+
+  // Silent background refresh when the parent signals that status may have changed
+  // (e.g. after marking all episodes watched via SeasonInfo)
+  useEffect(() => {
+    if (!refreshKey) return;
+    const user = auth.currentUser;
+    if (user) fetchStatus(user, true);
+  }, [refreshKey]);
 
   async function updateWatchStatus(targetStatus: WatchStatus) {
     const user = auth.currentUser;

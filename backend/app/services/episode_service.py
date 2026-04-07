@@ -258,6 +258,60 @@ def get_episodes_for_season(db: Session, show_id: int, season_number: int):
     )
 
 
+def _refresh_show_metadata(db: Session, show: Show):
+    """
+    Re-fetch show-level metadata from TMDB and persist any changes.
+    Specifically updates number_of_seasons, in_production, and adds any
+    Season rows that don't exist yet. This ensures refresh_episodes_for_show
+    discovers seasons that were announced after the show was first added.
+    """
+    from app.models.season import Season
+
+    try:
+        data = get(f"/tv/{show.id}")
+    except Exception:
+        return
+
+    if not data:
+        return
+
+    changed = False
+
+    new_num_seasons = data.get("number_of_seasons")
+    if new_num_seasons and new_num_seasons != show.number_of_seasons:
+        show.number_of_seasons = new_num_seasons
+        changed = True
+
+    new_in_production = data.get("in_production")
+    if new_in_production is not None and new_in_production != show.in_production:
+        show.in_production = new_in_production
+        changed = True
+
+    # Add Season rows for any seasons TMDB has that we don't yet have stored
+    existing_season_ids = {s.id for s in show.seasons}
+    for s in data.get("seasons", []):
+        sn = s.get("season_number", 0)
+        sid = s.get("id")
+        if sn <= 0 or not sid or sid in existing_season_ids:
+            continue
+        db.add(Season(
+            id=sid,
+            show_id=show.id,
+            season_number=sn,
+            name=s.get("name"),
+            overview=s.get("overview"),
+            air_date=s.get("air_date") or None,
+            episode_count=s.get("episode_count"),
+            poster_path=s.get("poster_path"),
+            vote_average=s.get("vote_average"),
+        ))
+        changed = True
+
+    if changed:
+        db.commit()
+        db.refresh(show)  # Ensure show.seasons reflects new rows
+
+
 def refresh_episodes_for_show(db: Session, show_id: int):
     """
     Re-fetch all seasons from TMDB for a show and upsert episode data.
@@ -377,23 +431,29 @@ def refresh_episodes_for_show(db: Session, show_id: int):
 
 def refresh_episodes_for_active_shows(db: Session):
     """
-    Refresh episode data for all tracked shows that are still in production.
-    Intended to run nightly.
+    Refresh episode data for all tracked shows (watchlist, currently watching,
+    and watched) that are still in production. Intended to run nightly.
     """
     from app.models.watchlist import Watchlist
     from app.models.currently_watching import CurrentlyWatching
+    from app.models.watched import Watched
 
-    tracked_ids = {
-        r.content_id
-        for r in db.query(Watchlist.content_id)
-        .filter_by(content_type="tv")
-        .all()
-    } | {
-        r.content_id
-        for r in db.query(CurrentlyWatching.content_id)
-        .filter_by(content_type="tv")
-        .all()
-    }
+    tracked_ids = (
+        {
+            r.content_id
+            for r in db.query(Watchlist.content_id).filter_by(content_type="tv").all()
+        }
+        | {
+            r.content_id
+            for r in db.query(CurrentlyWatching.content_id)
+            .filter_by(content_type="tv")
+            .all()
+        }
+        | {
+            r.content_id
+            for r in db.query(Watched.content_id).filter_by(content_type="tv").all()
+        }
+    )
 
     if not tracked_ids:
         return
@@ -408,7 +468,124 @@ def refresh_episodes_for_active_shows(db: Session):
     print(f"[episode refresh] Refreshing {len(shows)} in-production shows...")
     for show in shows:
         try:
+            # Re-fetch show metadata first so new seasons are discovered
+            _refresh_show_metadata(db, show)
             refresh_episodes_for_show(db, show.id)
         except Exception as e:
             print(f"[episode refresh] Failed for show {show.id} ({show.name}): {e}")
     print("[episode refresh] Done")
+
+
+def check_and_reactivate_watched_shows(db: Session):
+    """
+    After episode refresh, find users who have a show in Watched status but now
+    have unwatched episodes (because new episodes were added). Move those shows
+    back to Watchlist and send an email notification.
+    Intended to run nightly after refresh_episodes_for_active_shows.
+    """
+    from datetime import datetime
+    from sqlalchemy import and_
+    from app.models.watched import Watched
+    from app.models.watchlist import Watchlist
+    from app.models.episode_watched import EpisodeWatched
+    from app.models.user import User
+    from app.services.email_service import send_new_season_available_email
+
+    # Find all user+show pairs in Watched for in-production TV shows
+    watched_rows = (
+        db.query(Watched)
+        .join(Show, and_(Show.id == Watched.content_id, Watched.content_type == "tv"))
+        .filter(Show.in_production == True)  # noqa: E712
+        .all()
+    )
+
+    reactivated = 0
+    for row in watched_rows:
+        user_id = row.user_id
+        show_id = row.content_id
+
+        all_episodes = (
+            db.query(Episode)
+            .filter(Episode.show_id == show_id, Episode.season_number > 0)
+            .all()
+        )
+        watched_keys = {
+            (ew.season_number, ew.episode_number)
+            for ew in db.query(EpisodeWatched)
+            .filter_by(user_id=user_id, show_id=show_id)
+            .all()
+        }
+
+        new_episodes = [
+            ep for ep in all_episodes
+            if (ep.season_number, ep.episode_number) not in watched_keys
+        ]
+
+        if not new_episodes:
+            continue  # All episodes accounted for, nothing to reactivate
+
+        # Find the earliest new season and its premiere date (episode 1 air_date)
+        new_season_number = min(ep.season_number for ep in new_episodes)
+        season_eps = sorted(
+            [ep for ep in new_episodes if ep.season_number == new_season_number],
+            key=lambda e: e.episode_number,
+        )
+        premiere_date = (
+            str(season_eps[0].air_date) if season_eps and season_eps[0].air_date else None
+        )
+
+        show = db.query(Show).filter_by(id=show_id).first()
+
+        # Add to Watchlist first (while still in Watched, tracking_count is unchanged)
+        if not db.query(Watchlist).filter_by(
+            user_id=user_id, content_type="tv", content_id=show_id
+        ).first():
+            db.add(
+                Watchlist(
+                    user_id=user_id,
+                    content_type="tv",
+                    content_id=show_id,
+                    added_at=datetime.utcnow(),
+                )
+            )
+            db.flush()
+
+        # Delete the Watched row directly — do NOT use remove_from_watched because
+        # that would clear episode_watched history. tracking_count stays the same
+        # since the show is now on the watchlist.
+        db.delete(row)
+        db.commit()
+
+        reactivated += 1
+        show_name = show.name if show else str(show_id)
+        print(
+            f"[episode refresh] Reactivated '{show_name}' for user {user_id} — "
+            f"Season {new_season_number} premieres {premiere_date or 'TBD'}"
+        )
+
+        # Notify the user if email notifications are enabled
+        user = db.query(User).filter_by(id=user_id).first()
+        if user and user.email_notifications and user.email:
+            try:
+                send_new_season_available_email(
+                    to_email=user.email,
+                    username=user.username or "",
+                    shows=[
+                        {
+                            "show_name": show.name if show else "Unknown",
+                            "show_id": show_id,
+                            "poster_path": show.poster_path if show else None,
+                            "season_number": new_season_number,
+                            "premiere_date": premiere_date,
+                        }
+                    ],
+                    uid=user_id,
+                )
+            except Exception as e:
+                print(
+                    f"[episode refresh] Failed to send reactivation email "
+                    f"to user {user_id}: {e}"
+                )
+
+    if reactivated:
+        print(f"[episode refresh] Reactivated {reactivated} show(s) with new seasons")

@@ -67,31 +67,31 @@ def _email_wrapper(body_html: str, uid: str) -> str:
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 </head>
-<body style="margin:0;padding:0;background:#0f172a;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
-  <table width="100%" cellpadding="0" cellspacing="0" style="background:#0f172a;padding:32px 16px;">
+<body style="margin:0;padding:0;background:#0a0a0a;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#0a0a0a;padding:32px 16px;">
     <tr><td align="center">
       <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
 
         <!-- Header -->
-        <tr><td style="background:#1e3a8a;border-radius:12px 12px 0 0;padding:24px 32px;text-align:center;">
+        <tr><td style="background:#065f46;border-radius:12px 12px 0 0;padding:24px 32px;text-align:center;">
           <img src="{settings.FRONTEND_URL}/favicon-1024.png" width="48" height="48"
                style="border-radius:10px;margin-bottom:10px;display:block;margin-left:auto;margin-right:auto;" alt="Release Radar" />
           <span style="color:#ffffff;font-size:22px;font-weight:700;letter-spacing:-0.3px;">Release Radar</span>
         </td></tr>
 
         <!-- Body -->
-        <tr><td style="background:#1e293b;padding:28px 32px;">
+        <tr><td style="background:#1f1f1f;padding:28px 32px;">
           {body_html}
         </td></tr>
 
         <!-- Footer -->
-        <tr><td style="background:#0f172a;border-radius:0 0 12px 12px;padding:20px 32px;text-align:center;">
-          <p style="margin:0 0 10px;color:#64748b;font-size:12px;">
+        <tr><td style="background:#0a0a0a;border-radius:0 0 12px 12px;padding:20px 32px;text-align:center;">
+          <p style="margin:0 0 10px;color:#737373;font-size:12px;">
             You're receiving this because you have email notifications enabled on Release Radar.
           </p>
           <a href="{unsubscribe_url}"
-             style="display:inline-block;padding:6px 16px;background:#334155;color:#94a3b8;
-                    font-size:12px;text-decoration:none;border-radius:6px;border:1px solid #475569;">
+             style="display:inline-block;padding:6px 16px;background:#262626;color:#a3a3a3;
+                    font-size:12px;text-decoration:none;border-radius:6px;border:1px solid #404040;">
             Unsubscribe
           </a>
         </td></tr>
@@ -137,21 +137,20 @@ def _digest_item_row(item: dict) -> str:
         else ""
     )
 
-    # Time badge
+    # Time badge — emerald tones matching primary palette
     time_text = item.get("air_time") or (
         "Theaters" if content_type == "movie" else "Streaming"
     )
-    time_color = "#1e3a8a" if content_type == "movie" else "#1e3a5f"
+    time_color = "#065f46" if content_type == "movie" else "#064e3b"
 
     time_badge = (
-        f'<span style="display:inline-block;background:{time_color};color:#93c5fd;'
+        f'<span style="display:inline-block;background:{time_color};color:#6ee7b7;'
         f"font-size:11px;font-weight:600;padding:2px 8px;border-radius:999px;"
         f'margin-left:6px;">{time_text}</span>'
     )
 
     special_badge = ""
     if content_type == "tv" and item.get("episode_type"):
-        # Human-readable text, capitalize words and replace underscores
         ep_type_text = item["episode_type"].replace("_", " ").title()
         special_badge = (
             f'<span style="display:inline-block;background:#d97706;color:#fff;'
@@ -159,18 +158,17 @@ def _digest_item_row(item: dict) -> str:
             f'margin-left:6px;">{ep_type_text}</span>'
         )
 
-    # Flex layout with gap
     has_poster = bool(poster_path)
-    layout_style = "display:flex;align-items:flex-start;gap:14px;" if has_poster else ""
+    layout_style = "display:flex;align-items:flex-start;" if has_poster else ""
 
     return f"""
-<div style="{layout_style}background:#0f172a;border:1px solid #334155;
+<div style="{layout_style}background:#171717;border:1px solid #404040;
             border-radius:10px;padding:14px;margin-bottom:10px;">
   {poster}
   <div style="flex:1;min-width:0;">
-    <a href="{content_url}" style="color:#f1f5f9;font-size:15px;font-weight:600;
+    <a href="{content_url}" style="color:#f5f5f5;font-size:15px;font-weight:600;
        text-decoration:none;display:block;margin-bottom:3px;">{item["title"]}</a>
-    <span style="color:#64748b;font-size:13px;">{_format_date(item["date"])}</span>
+    <span style="color:#737373;font-size:13px;">{_format_date(item["date"])}</span>
     {time_badge}{special_badge}
   </div>
 </div>"""
@@ -186,7 +184,6 @@ def send_notification_email(
     if not upcoming_items:
         return
 
-    # 🧠 Decide labels
     if frequency == "weekly":
         subject = "Release Radar — Your Weekly Digest"
         intro = "Here's everything releasing this week that's on your radar:"
@@ -206,7 +203,6 @@ def send_notification_email(
         intro = f"Here's what's out today — {today_str} on your Release Radar:"
         group_by_day = False
 
-    # 🧱 Build HTML
     if group_by_day:
         by_day: dict[str, list] = defaultdict(list)
         for item in upcoming_items:
@@ -215,7 +211,7 @@ def send_notification_email(
         items_html = ""
         for day_date in sorted(by_day.keys()):
             items_html += f"""
-<p style="margin:20px 0 8px;color:#93c5fd;font-size:13px;font-weight:700;
+<p style="margin:20px 0 8px;color:#6ee7b7;font-size:13px;font-weight:700;
           text-transform:uppercase;letter-spacing:0.8px;">
   {_format_date(day_date)}
 </p>"""
@@ -224,18 +220,17 @@ def send_notification_email(
     else:
         items_html = "".join(_digest_item_row(item) for item in upcoming_items)
 
-    # 📧 Email body
     body = f"""
-<h2 style="margin:0 0 4px;color:#f1f5f9;font-size:20px;font-weight:700;">
+<h2 style="margin:0 0 4px;color:#f5f5f5;font-size:20px;font-weight:700;">
   Hi {username or 'there'} 👋
 </h2>
-<p style="margin:0 0 20px;color:#94a3b8;font-size:14px;">
+<p style="margin:0 0 20px;color:#a3a3a3;font-size:14px;">
   {intro}
 </p>
 {items_html}
 <div style="text-align:center;margin-top:24px;">
   <a href="{settings.FRONTEND_URL}"
-     style="display:inline-block;background:#2563eb;color:#ffffff;font-weight:600;
+     style="display:inline-block;background:#059669;color:#ffffff;font-weight:600;
             font-size:14px;padding:12px 28px;border-radius:8px;text-decoration:none;">
     Open Release Radar
   </a>
@@ -269,20 +264,22 @@ def send_season_premiere_email(
             if show_id
             else settings.FRONTEND_URL
         )
-        poster = _poster_img(a.get("poster_path"), a["show_name"], content_url)
         has_poster = bool(a.get("poster_path"))
-        layout_style = (
-            "display:flex;align-items:flex-start;gap:14px;" if has_poster else ""
+        poster_inner = _poster_img(a.get("poster_path"), a["show_name"], content_url)
+        poster = (
+            f'<div style="flex-shrink:0;margin-right:16px;">{poster_inner}</div>'
+            if has_poster else ""
         )
+        layout_style = "display:flex;align-items:flex-start;" if has_poster else ""
         return f"""
-<div style="{layout_style}background:#0f172a;border:1px solid #334155;
+<div style="{layout_style}background:#171717;border:1px solid #404040;
             border-radius:10px;padding:14px;margin-bottom:10px;">
   {poster}
   <div style="flex:1;">
-    <a href="{content_url}" style="color:#f1f5f9;font-size:15px;font-weight:600;
+    <a href="{content_url}" style="color:#f5f5f5;font-size:15px;font-weight:600;
        text-decoration:none;display:block;margin-bottom:2px;">{a["show_name"]}</a>
-    <p style="margin:0 0 4px;color:#93c5fd;font-size:13px;">{season_label}</p>
-    <p style="margin:0;color:#64748b;font-size:12px;">Premieres {_format_date(a["air_date"])}</p>
+    <p style="margin:0 0 4px;color:#6ee7b7;font-size:13px;">{season_label}</p>
+    <p style="margin:0;color:#737373;font-size:12px;">Premieres {_format_date(a["air_date"])}</p>
   </div>
 </div>"""
 
@@ -302,17 +299,121 @@ def send_season_premiere_email(
     subject = f"New season{'s' if count > 1 else ''} coming soon — Release Radar"
 
     body = f"""
-<h2 style="margin:0 0 4px;color:#f1f5f9;font-size:20px;font-weight:700;">
+<h2 style="margin:0 0 4px;color:#f5f5f5;font-size:20px;font-weight:700;">
   Hi {username or 'there'} 👋
 </h2>
-<p style="margin:0 0 20px;color:#94a3b8;font-size:14px;">
+<p style="margin:0 0 20px;color:#a3a3a3;font-size:14px;">
   Heads up — the following show{'s' if count > 1 else ''} you're tracking
   ha{'ve' if count > 1 else 's'} a new season on the way:
 </p>
 {sections}
 <div style="text-align:center;margin-top:24px;">
   <a href="{settings.FRONTEND_URL}"
-     style="display:inline-block;background:#2563eb;color:#ffffff;font-weight:600;
+     style="display:inline-block;background:#059669;color:#ffffff;font-weight:600;
+            font-size:14px;padding:12px 28px;border-radius:8px;text-decoration:none;">
+    Open Release Radar
+  </a>
+</div>"""
+
+    send_email(to_email, subject, _email_wrapper(body, uid))
+
+
+# ── New season alert (reactivation) ──────────────────────────────────────────
+
+
+def send_new_season_available_email(
+    to_email: str,
+    username: str,
+    shows: list,
+    uid: str = "",
+):
+    """
+    Notify a user that a new season is coming for shows they've already finished.
+    Each show dict has: show_name, show_id, poster_path, season_number, premiere_date (optional).
+    The shows have already been moved back to the user's watchlist.
+    """
+    if not shows:
+        return
+
+    today = datetime.utcnow().date()
+
+    def _premiere_line(s: dict) -> str:
+        season_number = s.get("season_number")
+        premiere_date = s.get("premiere_date")  # "YYYY-MM-DD" string or None
+        season_label = f"Season {season_number}" if season_number else "A new season"
+
+        if premiere_date:
+            try:
+                from datetime import date as date_type
+                pd = date_type.fromisoformat(premiere_date)
+                if pd > today:
+                    date_str = _format_date(premiere_date)
+                    return (
+                        f'<p style="margin:2px 0 0;color:#f59e0b;font-size:13px;font-weight:500;">'
+                        f"{season_label} premieres {date_str}</p>"
+                    )
+                else:
+                    return (
+                        f'<p style="margin:2px 0 0;color:#10b981;font-size:13px;font-weight:500;">'
+                        f"{season_label} is now available</p>"
+                    )
+            except ValueError:
+                pass
+
+        return (
+            f'<p style="margin:2px 0 0;color:#f59e0b;font-size:13px;font-weight:500;">'
+            f"{season_label} is coming — premiere date TBD</p>"
+        )
+
+    def _show_card(s: dict) -> str:
+        show_id = s.get("show_id")
+        content_url = (
+            f"{settings.FRONTEND_URL}/tv/{show_id}"
+            if show_id
+            else settings.FRONTEND_URL
+        )
+        has_poster = bool(s.get("poster_path"))
+        poster = (
+            f'<div style="flex-shrink:0;margin-right:16px;">'
+            f'{_poster_img(s.get("poster_path"), s["show_name"], content_url)}'
+            f'</div>'
+            if has_poster else ""
+        )
+        layout_style = "display:flex;align-items:flex-start;" if has_poster else ""
+        return f"""
+<div style="{layout_style}background:#171717;border:1px solid #404040;
+            border-radius:10px;padding:14px;margin-bottom:10px;">
+  {poster}
+  <div style="flex:1;">
+    <a href="{content_url}" style="color:#f5f5f5;font-size:15px;font-weight:600;
+       text-decoration:none;display:block;margin-bottom:2px;">{s["show_name"]}</a>
+    {_premiere_line(s)}
+    <p style="margin:4px 0 0;color:#737373;font-size:12px;">Added back to your watchlist</p>
+  </div>
+</div>"""
+
+    count = len(shows)
+    first = shows[0]
+    if count == 1:
+        season_label = f"Season {first['season_number']}" if first.get("season_number") else "A new season"
+        subject = f"{season_label} of {first['show_name']} is coming — Release Radar"
+    else:
+        subject = f"New seasons coming for {count} shows you've finished — Release Radar"
+
+    cards = "".join(_show_card(s) for s in shows)
+    body = f"""
+<h2 style="margin:0 0 4px;color:#f5f5f5;font-size:20px;font-weight:700;">
+  Hi {username or 'there'} 👋
+</h2>
+<p style="margin:0 0 20px;color:#a3a3a3;font-size:14px;">
+  {'A show' if count == 1 else 'Some shows'} you already finished
+  {'is' if count == 1 else 'are'} getting a new season.
+  {'It has' if count == 1 else 'They have'} been moved back to your watchlist:
+</p>
+{cards}
+<div style="text-align:center;margin-top:24px;">
+  <a href="{settings.FRONTEND_URL}"
+     style="display:inline-block;background:#059669;color:#ffffff;font-weight:600;
             font-size:14px;padding:12px 28px;border-radius:8px;text-decoration:none;">
     Open Release Radar
   </a>
@@ -352,31 +453,31 @@ def send_recommendation_email(
     message_block = ""
     if message:
         message_block = (
-            f'<div style="background:#0f172a;border-left:3px solid #3b82f6;'
+            f'<div style="background:#171717;border-left:3px solid #10b981;'
             f'border-radius:0 8px 8px 0;padding:12px 16px;margin:16px 0;">'
-            f'<p style="margin:0;color:#94a3b8;font-size:14px;font-style:italic;">"{message}"</p>'
+            f'<p style="margin:0;color:#a3a3a3;font-size:14px;font-style:italic;">"{message}"</p>'
             f"</div>"
         )
 
     body = f"""
-<h2 style="margin:0 0 4px;color:#f1f5f9;font-size:20px;font-weight:700;">
+<h2 style="margin:0 0 4px;color:#f5f5f5;font-size:20px;font-weight:700;">
   Hi {to_username or 'there'} 👋
 </h2>
-<p style="margin:0 0 20px;color:#94a3b8;font-size:14px;">
-  <strong style="color:#93c5fd;">@{from_username}</strong> recommended a {kind} for you:
+<p style="margin:0 0 20px;color:#a3a3a3;font-size:14px;">
+  <strong style="color:#6ee7b7;">@{from_username}</strong> recommended a {kind} for you:
 </p>
 {poster_block}
-<div style="background:#0f172a;border:1px solid #334155;border-radius:10px;padding:16px;margin-bottom:16px;">
+<div style="background:#171717;border:1px solid #404040;border-radius:10px;padding:16px;margin-bottom:16px;">
   <a href="{content_url}"
-     style="color:#f1f5f9;font-size:18px;font-weight:700;text-decoration:none;">
+     style="color:#f5f5f5;font-size:18px;font-weight:700;text-decoration:none;">
     {content_title}
   </a>
-  <p style="margin:4px 0 0;color:#64748b;font-size:13px;text-transform:capitalize;">{kind}</p>
+  <p style="margin:4px 0 0;color:#737373;font-size:13px;text-transform:capitalize;">{kind}</p>
 </div>
 {message_block}
 <div style="text-align:center;margin-top:24px;">
   <a href="{content_url}"
-     style="display:inline-block;background:#2563eb;color:#ffffff;font-weight:600;
+     style="display:inline-block;background:#059669;color:#ffffff;font-weight:600;
             font-size:14px;padding:12px 28px;border-radius:8px;text-decoration:none;">
     View {content_title}
   </a>

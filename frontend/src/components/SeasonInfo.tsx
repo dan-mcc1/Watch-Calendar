@@ -11,6 +11,8 @@ interface SeasonInfoProps {
   showId: number;
   seasons: Season[];
   refreshKey?: number;
+  /** Called after any episode or season watch toggle so the parent can refresh the WatchButton. */
+  onEpisodeToggle?: () => void;
 }
 
 function getEpisodeTag(
@@ -59,6 +61,7 @@ export default function SeasonInfo({
   showId,
   seasons,
   refreshKey,
+  onEpisodeToggle,
 }: SeasonInfoProps) {
   const auth = getAuth(firebaseApp);
 
@@ -173,6 +176,7 @@ export default function SeasonInfo({
         { method, headers: { Authorization: `Bearer ${token}` } },
       );
       if (!res.ok) throw new Error("Request failed");
+      onEpisodeToggle?.();
     } catch (err) {
       console.error(err);
       // Revert optimistic update on failure
@@ -208,6 +212,7 @@ export default function SeasonInfo({
       );
       if (!res.ok) throw new Error("Request failed");
       await fetchWatchedEpisodes(user);
+      onEpisodeToggle?.();
     } catch (err) {
       console.error(err);
     } finally {

@@ -140,6 +140,7 @@ export default function ShowInfo() {
   );
   const [aggRating, setAggRating] = useState<AggregateRating | null>(null);
   const [episodeRefreshKey, setEpisodeRefreshKey] = useState(0);
+  const [watchButtonRefreshKey, setWatchButtonRefreshKey] = useState(0);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (u) => {
@@ -306,6 +307,7 @@ export default function ShowInfo() {
               initialStatus={initialStatus}
               initialRating={initialRating}
               onStatusChange={() => setEpisodeRefreshKey((k) => k + 1)}
+              refreshKey={watchButtonRefreshKey}
             />
           )}
           {user && <FavoriteButton contentType="tv" contentId={show.id} />}
@@ -489,6 +491,7 @@ export default function ShowInfo() {
             showId={show.id}
             seasons={show.seasons}
             refreshKey={episodeRefreshKey}
+            onEpisodeToggle={() => setWatchButtonRefreshKey((k) => k + 1)}
           />
         )}
 
