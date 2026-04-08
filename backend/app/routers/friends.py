@@ -1,12 +1,17 @@
 # app/routers/friends.py
-from fastapi import APIRouter, Depends, Body, Query
+from fastapi import APIRouter, Depends, Body, Query, Request
 from sqlalchemy.orm import Session
+from app.core.limiter import limiter
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user
 from app.services import friends_service
 from app.services.friends_service import get_followers
 from app.services.user_service import search_users_by_username
-from app.services.activity_service import get_friends_activity, get_activity_feed, get_my_activity
+from app.services.activity_service import (
+    get_friends_activity,
+    get_activity_feed,
+    get_my_activity,
+)
 from app.core.event_bus import publish
 from app.models.user import User
 
@@ -14,18 +19,29 @@ router = APIRouter()
 
 
 @router.get("/search")
+@limiter.limit("30/minute")
 def search_users(
-    q: str = Query(..., min_length=1),
+    request: Request,
+    q: str = Query(..., min_length=1, max_length=50),
     db: Session = Depends(get_db),
     uid: str = Depends(get_current_user),
 ):
     """Search users by partial username to find someone to add."""
     users = search_users_by_username(db, q, current_user_id=uid)
-    return [{"id": u.id, "username": u.username, "profile_visibility": u.profile_visibility or "friends_only"} for u in users]
+    return [
+        {
+            "id": u.id,
+            "username": u.username,
+            "profile_visibility": u.profile_visibility or "friends_only",
+        }
+        for u in users
+    ]
 
 
 @router.post("/request")
+@limiter.limit("20/minute")
 def send_request(
+    request: Request,
     addressee_username: str = Body(..., embed=True),
     db: Session = Depends(get_db),
     uid: str = Depends(get_current_user),

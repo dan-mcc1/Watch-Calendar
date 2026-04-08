@@ -1,7 +1,9 @@
 # app/routers/user.py
 import re
 import random
-from fastapi import APIRouter, Depends, HTTPException, Body, Query
+from fastapi import APIRouter, Depends, HTTPException, Body, Query, Request
+from app.core.limiter import limiter
+from pydantic import EmailStr
 from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.services.user_service import (
@@ -45,9 +47,11 @@ def _validate_username(username: str):
 
 
 @router.post("/create")
+@limiter.limit("10/minute")
 def create_user_route(
+    request: Request,
     db: Session = Depends(get_db),
-    uid: str = Body(...),
+    uid: str = Depends(get_current_user),
     email: str | None = Body(None),
     username: str | None = Body(None),
 ):
@@ -71,7 +75,9 @@ def get_current_user_route(
 
 @router.put("/update-email")
 def update_email_route(
-    new_email: str, db: Session = Depends(get_db), uid: str = Depends(get_current_user)
+    new_email: EmailStr = Query(...),
+    db: Session = Depends(get_db),
+    uid: str = Depends(get_current_user),
 ):
     user = update_user_email(db, uid, new_email)
     if not user:
@@ -125,7 +131,9 @@ def update_bio_route(
     uid: str = Depends(get_current_user),
 ):
     if bio is not None and len(bio) > 300:
-        raise HTTPException(status_code=422, detail="Bio must be 300 characters or fewer.")
+        raise HTTPException(
+            status_code=422, detail="Bio must be 300 characters or fewer."
+        )
     user = db.query(User).filter_by(id=uid).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found.")
@@ -136,7 +144,9 @@ def update_bio_route(
 
 
 @router.get("/check-username")
+@limiter.limit("30/minute")
 def check_username_route(
+    request: Request,
     username: str = Query(...),
     db: Session = Depends(get_db),
 ):

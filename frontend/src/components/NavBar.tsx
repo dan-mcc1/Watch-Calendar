@@ -276,9 +276,17 @@ export default function NavBar() {
       fetchCounts(token);
       fetchAvatar(token);
 
-      // EventSource can't send custom headers, so token goes in the query string
+      // EventSource can't send custom headers, so we exchange the Firebase token
+      // for a short-lived (60s) single-use session token first, then use that
+      // in the URL so the long-lived credential never appears in logs or history.
+      const tokenRes = await fetch(`${API_URL}/events/token`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!tokenRes.ok) return;
+      const { session_token } = await tokenRes.json();
       const es = new EventSource(
-        `${API_URL}/events/stream?token=${encodeURIComponent(token)}`,
+        `${API_URL}/events/stream?token=${encodeURIComponent(session_token)}`,
       );
       esRef.current = es;
       es.onmessage = (e) => {

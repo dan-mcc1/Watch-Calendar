@@ -95,14 +95,17 @@ const SignIn: React.FC = () => {
   }
 
   async function registerUserInBackend(
-    uid: string,
-    email: string | null,
+    user: import("firebase/auth").User,
     username: string,
   ) {
+    const token = await user.getIdToken();
     const res = await fetch(`${API_URL}/user/create`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ uid, email, username }),
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ email: user.email, username }),
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
@@ -166,7 +169,7 @@ const SignIn: React.FC = () => {
     setIsLoading(true);
     try {
       const res = await createUserWithEmailAndPassword(auth, email, password);
-      await registerUserInBackend(res.user.uid, res.user.email, username);
+      await registerUserInBackend(res.user, username);
       navigate("/");
     } catch (err: any) {
       console.error("Error registering:", err);
@@ -185,19 +188,23 @@ const SignIn: React.FC = () => {
   };
 
   // Called after any OAuth sign-in to check if user needs a username
-  async function handleOAuthResult(uid: string, email: string | null) {
+  async function handleOAuthResult(user: import("firebase/auth").User) {
     // Check if user already exists in backend with a username
     try {
+      const token = await user.getIdToken();
       const res = await fetch(`${API_URL}/user/create`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ uid, email }),
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ email: user.email }),
       });
       if (res.ok) {
         const data = await res.json();
         if (!data.username) {
           // New user or no username yet — prompt for one
-          setPendingOAuth({ uid, email });
+          setPendingOAuth({ uid: user.uid, email: user.email });
           return;
         }
       }
@@ -255,7 +262,7 @@ const SignIn: React.FC = () => {
     const provider = new GoogleAuthProvider();
     try {
       const result = await signInWithPopup(auth, provider);
-      await handleOAuthResult(result.user.uid, result.user.email);
+      await handleOAuthResult(result.user);
     } catch (error: any) {
       console.error("Google sign-in error:", error);
       let msg = error.message ?? "Sign-in failed.";
@@ -270,7 +277,7 @@ const SignIn: React.FC = () => {
     const provider = new OAuthProvider("microsoft.com");
     try {
       const result = await signInWithPopup(auth, provider);
-      await handleOAuthResult(result.user.uid, result.user.email);
+      await handleOAuthResult(result.user);
     } catch (error: any) {
       console.error("Microsoft sign-in error:", error);
       let msg = error.message ?? "Sign-in failed.";
@@ -285,7 +292,7 @@ const SignIn: React.FC = () => {
     const provider = new FacebookAuthProvider();
     try {
       const result = await signInWithPopup(auth, provider);
-      await handleOAuthResult(result.user.uid, result.user.email);
+      await handleOAuthResult(result.user);
     } catch (error: any) {
       console.error("Facebook sign-in error:", error);
       let msg = error.message ?? "Sign-in failed.";

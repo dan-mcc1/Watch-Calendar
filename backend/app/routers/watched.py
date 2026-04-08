@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Body, BackgroundTasks, HTTPException
+from fastapi import APIRouter, Depends, Body, BackgroundTasks, HTTPException, Request
 from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.services.watched_service import (
@@ -12,18 +12,25 @@ from app.services.watched_service import (
     update_watched_rating,
 )
 from app.dependencies.auth import get_current_user
+from app.core.limiter import limiter
 
 router = APIRouter()
 
 
 @router.post("/add")
+@limiter.limit("30/minute")
 def add_item(
+    request: Request,
     background_tasks: BackgroundTasks,
     content_type: str = Body(...),
     content_id: int = Body(...),
     db: Session = Depends(get_db),
     uid: str = Depends(get_current_user),
 ):
+    if content_type not in ("movie", "tv"):
+        raise HTTPException(
+            status_code=400, detail="content_type must be 'movie' or 'tv'"
+        )
     result = add_to_watched(db, uid, content_type, content_id)
     if content_type == "tv":
         mark_existing_episodes_watched(db, uid, content_id)
@@ -52,6 +59,10 @@ def remove_item(
     db: Session = Depends(get_db),
     uid: str = Depends(get_current_user),
 ):
+    if content_type not in ("movie", "tv"):
+        raise HTTPException(
+            status_code=400, detail="content_type must be 'movie' or 'tv'"
+        )
     return remove_from_watched(db, uid, content_type, content_id)
 
 

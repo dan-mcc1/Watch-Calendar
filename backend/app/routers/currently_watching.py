@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Body, HTTPException
+from fastapi import APIRouter, Depends, Body, HTTPException, Request
 from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user
@@ -6,6 +6,7 @@ from app.services import currently_watching_service
 from app.services import activity_service
 from app.models.movie import Movie
 from app.models.show import Show
+from app.core.limiter import limiter
 
 router = APIRouter()
 
@@ -35,15 +36,21 @@ def get_currently_watching_movie(
 
 
 @router.post("/add")
+@limiter.limit("10/minute")
 def add_currently_watching(
+    request: Request,
     content_type: str = Body(...),
     content_id: int = Body(...),
     db: Session = Depends(get_db),
     uid: str = Depends(get_current_user),
 ):
     if content_type not in ("movie", "tv"):
-        raise HTTPException(status_code=400, detail="content_type must be 'movie' or 'tv'")
-    entry = currently_watching_service.add_to_currently_watching(db, uid, content_type, content_id)
+        raise HTTPException(
+            status_code=400, detail="content_type must be 'movie' or 'tv'"
+        )
+    entry = currently_watching_service.add_to_currently_watching(
+        db, uid, content_type, content_id
+    )
 
     # Log activity
     if content_type == "movie":
@@ -70,4 +77,10 @@ def remove_currently_watching(
     db: Session = Depends(get_db),
     uid: str = Depends(get_current_user),
 ):
-    return currently_watching_service.remove_from_currently_watching(db, uid, content_type, content_id)
+    if content_type not in ("movie", "tv"):
+        raise HTTPException(
+            status_code=400, detail="content_type must be 'movie' or 'tv'"
+        )
+    return currently_watching_service.remove_from_currently_watching(
+        db, uid, content_type, content_id
+    )

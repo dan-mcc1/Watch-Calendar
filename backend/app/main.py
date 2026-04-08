@@ -3,6 +3,9 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 from fastapi import FastAPI, Header, HTTPException
+from slowapi.errors import RateLimitExceeded
+from slowapi import _rate_limit_exceeded_handler
+from app.core.limiter import limiter
 from app.config import settings
 from app.routers import (
     tv,
@@ -23,8 +26,10 @@ from app.routers import (
     reviews,
     box_office,
     collections,
+    dev,
 )
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 from app.db.session import SessionLocal, engine
 from app.db.base import Base
 from app.services.activity_service import delete_old_activity
@@ -34,7 +39,10 @@ from app.routers.notifications import (
     send_season_premiere_alerts_to_all,
 )
 from app.services.vote_update_service import update_all_vote_averages
-from app.services.episode_service import refresh_episodes_for_active_shows
+from app.services.episode_service import (
+    refresh_episodes_for_active_shows,
+    check_and_reactivate_watched_shows,
+)
 
 
 async def _activity_cleanup_loop():
@@ -94,6 +102,7 @@ async def _episode_update_loop():
         try:
             db = SessionLocal()
             refresh_episodes_for_active_shows(db)
+            check_and_reactivate_watched_shows(db)
             await asyncio.to_thread(update_all_vote_averages, db)
         except Exception as e:
             print(f"[vote update] Error: {e}")
@@ -130,10 +139,16 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="ReleaseRadar API", lifespan=lifespan)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 app.add_middleware(
+    TrustedHostMiddleware,
+    allowed_hosts=["releaseradar.co", "www.releaseradar.co", "localhost", "127.0.0.1"],
+)
+app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://releaseradar.co", "https://www.releaseradar.co"],
+    allow_origins=settings.CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -165,3 +180,5 @@ app.include_router(events.router, prefix="/events", tags=["events"])
 app.include_router(reviews.router, prefix="/reviews", tags=["reviews"])
 app.include_router(box_office.router, prefix="/box-office", tags=["box-office"])
 app.include_router(collections.router, prefix="/collections", tags=["collections"])
+if settings.ENVIRONMENT != "production":
+    app.include_router(dev.router, prefix="/dev", tags=["dev"])

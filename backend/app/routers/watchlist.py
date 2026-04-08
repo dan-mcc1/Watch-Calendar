@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Body
+from fastapi import APIRouter, Depends, Body, HTTPException, Request
 from sqlalchemy import tuple_
 from sqlalchemy.orm import Session
 from app.db.session import get_db
@@ -16,6 +16,7 @@ from app.models.watchlist import Watchlist
 from app.models.watched import Watched
 from app.models.currently_watching import CurrentlyWatching
 from app.dependencies.auth import get_current_user
+from app.core.limiter import limiter
 
 router = APIRouter()
 
@@ -27,6 +28,10 @@ def add_item(
     db: Session = Depends(get_db),
     uid: str = Depends(get_current_user),  # secure current user
 ):
+    if content_type not in ("movie", "tv"):
+        raise HTTPException(
+            status_code=400, detail="content_type must be 'movie' or 'tv'"
+        )
     return add_to_watchlist(db, uid, content_type, content_id)
 
 
@@ -37,6 +42,10 @@ def remove_item(
     db: Session = Depends(get_db),
     uid: str = Depends(get_current_user),
 ):
+    if content_type not in ("movie", "tv"):
+        raise HTTPException(
+            status_code=400, detail="content_type must be 'movie' or 'tv'"
+        )
     return remove_from_watchlist(db, uid, content_type, content_id)
 
 
@@ -71,7 +80,9 @@ def watchlist_movie_info(
 
 
 @router.post("/status/bulk")
+@limiter.limit("60/minute")
 def bulk_status(
+    request: Request,
     items: list[dict] = Body(...),
     db: Session = Depends(get_db),
     uid: str = Depends(get_current_user),
@@ -83,23 +94,38 @@ def bulk_status(
     """
     if not items:
         return {}
-
+    if len(items) > 500:
+        items = items[:500]
     pairs = [(i["content_type"], i["content_id"]) for i in items]
 
-    cw_rows = db.query(CurrentlyWatching.content_type, CurrentlyWatching.content_id).filter(
-        CurrentlyWatching.user_id == uid,
-        tuple_(CurrentlyWatching.content_type, CurrentlyWatching.content_id).in_(pairs),
-    ).all()
+    cw_rows = (
+        db.query(CurrentlyWatching.content_type, CurrentlyWatching.content_id)
+        .filter(
+            CurrentlyWatching.user_id == uid,
+            tuple_(CurrentlyWatching.content_type, CurrentlyWatching.content_id).in_(
+                pairs
+            ),
+        )
+        .all()
+    )
 
-    wl_rows = db.query(Watchlist.content_type, Watchlist.content_id).filter(
-        Watchlist.user_id == uid,
-        tuple_(Watchlist.content_type, Watchlist.content_id).in_(pairs),
-    ).all()
+    wl_rows = (
+        db.query(Watchlist.content_type, Watchlist.content_id)
+        .filter(
+            Watchlist.user_id == uid,
+            tuple_(Watchlist.content_type, Watchlist.content_id).in_(pairs),
+        )
+        .all()
+    )
 
-    wd_rows = db.query(Watched.content_type, Watched.content_id, Watched.rating).filter(
-        Watched.user_id == uid,
-        tuple_(Watched.content_type, Watched.content_id).in_(pairs),
-    ).all()
+    wd_rows = (
+        db.query(Watched.content_type, Watched.content_id, Watched.rating)
+        .filter(
+            Watched.user_id == uid,
+            tuple_(Watched.content_type, Watched.content_id).in_(pairs),
+        )
+        .all()
+    )
 
     # Start with "none" for everything, then apply in ascending priority
     # so higher-priority statuses overwrite lower ones

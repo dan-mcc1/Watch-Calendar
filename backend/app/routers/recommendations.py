@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Body, HTTPException, BackgroundTasks
+from fastapi import APIRouter, Depends, Body, HTTPException, BackgroundTasks, Request
 from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user
@@ -12,6 +12,7 @@ from app.services.recommendation_service import (
 from app.services.email_service import send_recommendation_email
 from app.core.event_bus import publish
 from app.services.for_you_service import get_for_you_recommendations
+from app.core.limiter import limiter
 
 router = APIRouter()
 
@@ -28,7 +29,9 @@ def for_you(
 
 
 @router.post("/send")
+@limiter.limit("10/minute")
 def send(
+    request: Request,
     background_tasks: BackgroundTasks,
     recipient_username: str = Body(...),
     content_type: str = Body(...),
@@ -40,10 +43,18 @@ def send(
     uid: str = Depends(get_current_user),
 ):
     if content_type not in ("movie", "tv"):
-        raise HTTPException(status_code=400, detail="content_type must be 'movie' or 'tv'")
+        raise HTTPException(
+            status_code=400, detail="content_type must be 'movie' or 'tv'"
+        )
     result = send_recommendation(
-        db, uid, recipient_username, content_type, content_id,
-        content_title, content_poster_path, message,
+        db,
+        uid,
+        recipient_username,
+        content_type,
+        content_id,
+        content_title,
+        content_poster_path,
+        message,
     )
     publish(result.recipient_id, "recommendation")
     if result._email_params:
