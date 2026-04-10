@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
-import { getAuth, onAuthStateChanged, User } from "firebase/auth";
-import { firebaseApp } from "../firebase";
-import { API_URL, BASE_IMAGE_URL, getAvatarColor } from "../constants";
+import { useAuthUser } from "../hooks/useAuthUser";
+import { apiFetch } from "../utils/apiFetch";
+import { BASE_IMAGE_URL, getAvatarColor } from "../constants";
 import { Movie, Show } from "../types/calendar";
 import { Link } from "react-router-dom";
 import FriendSearch from "../components/FriendSearch";
@@ -108,10 +108,8 @@ function HeroAvatar({
 
 export default function ProfilePage() {
   usePageTitle("My Profile");
-  const auth = getAuth(firebaseApp);
-  const [user, setUser] = useState(auth.currentUser);
+  const user = useAuthUser();
   const [dbUser, setDbUser] = useState<DBUser | null>(null);
-  const [token, setToken] = useState<string | null>(null);
 
   const [watchlist, setWatchlist] = useState<{
     movies: Movie[];
@@ -140,21 +138,13 @@ export default function ProfilePage() {
   const [followers, setFollowers] = useState<FollowerEntry[]>([]);
   const [addingBack, setAddingBack] = useState<string | null>(null);
 
-  async function fetchFriends(tok: string) {
+  async function fetchFriends() {
     const [friendsRes, incomingRes, outgoingRes, followersRes] =
       await Promise.all([
-        fetch(`${API_URL}/friends/`, {
-          headers: { Authorization: `Bearer ${tok}` },
-        }),
-        fetch(`${API_URL}/friends/requests/incoming`, {
-          headers: { Authorization: `Bearer ${tok}` },
-        }),
-        fetch(`${API_URL}/friends/requests/outgoing`, {
-          headers: { Authorization: `Bearer ${tok}` },
-        }),
-        fetch(`${API_URL}/friends/followers`, {
-          headers: { Authorization: `Bearer ${tok}` },
-        }),
+        apiFetch("/friends/"),
+        apiFetch("/friends/requests/incoming"),
+        apiFetch("/friends/requests/outgoing"),
+        apiFetch("/friends/followers"),
       ]);
     setFriends(friendsRes.ok ? await friendsRes.json() : []);
     setIncoming(incomingRes.ok ? await incomingRes.json() : []);
@@ -163,15 +153,12 @@ export default function ProfilePage() {
   }
 
   async function addBack(follower: FollowerEntry["follower"]) {
-    if (!token || addingBack) return;
+    if (addingBack) return;
     setAddingBack(follower.id);
     try {
-      const res = await fetch(`${API_URL}/friends/request`, {
+      const res = await apiFetch("/friends/request", {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ addressee_username: follower.username }),
       });
       if (res.ok) {
@@ -186,34 +173,18 @@ export default function ProfilePage() {
     }
   }
 
-  const fetchAll = useCallback(async (firebaseUser: User) => {
+  const fetchAll = useCallback(async (uid: string) => {
     setLoading(true);
     try {
-      const tok = await firebaseUser.getIdToken();
-      setToken(tok);
-      const uid = firebaseUser.uid;
-
       const cachedWatchlist = getCachedWatchlist(uid);
       const cachedWatched = getCachedWatched(uid);
 
       const [meRes, favoritesRes, watchlistRes, watchedRes] = await Promise.all(
         [
-          fetch(`${API_URL}/user/me`, {
-            headers: { Authorization: `Bearer ${tok}` },
-          }),
-          fetch(`${API_URL}/favorites`, {
-            headers: { Authorization: `Bearer ${tok}` },
-          }),
-          cachedWatchlist
-            ? Promise.resolve(null)
-            : fetch(`${API_URL}/watchlist`, {
-                headers: { Authorization: `Bearer ${tok}` },
-              }),
-          cachedWatched
-            ? Promise.resolve(null)
-            : fetch(`${API_URL}/watched`, {
-                headers: { Authorization: `Bearer ${tok}` },
-              }),
+          apiFetch("/user/me"),
+          apiFetch("/favorites"),
+          cachedWatchlist ? Promise.resolve(null) : apiFetch("/watchlist"),
+          cachedWatched ? Promise.resolve(null) : apiFetch("/watched"),
         ],
       );
 
@@ -240,7 +211,7 @@ export default function ProfilePage() {
         setCachedWatched(uid, wd);
       }
 
-      await fetchFriends(tok);
+      await fetchFriends();
     } catch (err) {
       console.error(err);
     } finally {
@@ -249,21 +220,14 @@ export default function ProfilePage() {
   }, []);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
-      setUser(firebaseUser);
-      if (firebaseUser) fetchAll(firebaseUser);
-    });
-    return () => unsubscribe();
-  }, [fetchAll]);
+    if (user) fetchAll(user.uid);
+  }, [user, fetchAll]);
 
   // Refresh friend requests when a new one arrives via SSE (NavBar broadcasts this event)
   useEffect(() => {
-    function handler() {
-      if (token) fetchFriends(token);
-    }
-    window.addEventListener("friend-request-received", handler);
-    return () => window.removeEventListener("friend-request-received", handler);
-  }, [token]);
+    window.addEventListener("friend-request-received", fetchFriends);
+    return () => window.removeEventListener("friend-request-received", fetchFriends);
+  }, []);
 
   if (!user) {
     return (
@@ -592,36 +556,34 @@ export default function ProfilePage() {
           </div>
 
           {/* Stats */}
-          {token && (
-            <div className="bg-neutral-800 rounded-xl overflow-hidden">
-              <button
-                onClick={() => setStatsOpen((o) => !o)}
-                className="w-full flex items-center justify-between px-4 py-3.5 text-left hover:bg-neutral-700/50 transition-colors"
+          <div className="bg-neutral-800 rounded-xl overflow-hidden">
+            <button
+              onClick={() => setStatsOpen((o) => !o)}
+              className="w-full flex items-center justify-between px-4 py-3.5 text-left hover:bg-neutral-700/50 transition-colors"
+            >
+              <span className="text-base font-semibold text-white">
+                Stats
+              </span>
+              <svg
+                className={`w-4 h-4 text-neutral-400 transition-transform duration-200 ${statsOpen ? "rotate-180" : ""}`}
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={2}
               >
-                <span className="text-base font-semibold text-white">
-                  Stats
-                </span>
-                <svg
-                  className={`w-4 h-4 text-neutral-400 transition-transform duration-200 ${statsOpen ? "rotate-180" : ""}`}
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  strokeWidth={2}
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M19 9l-7 7-7-7"
-                  />
-                </svg>
-              </button>
-              {statsOpen && (
-                <div className="px-4 pb-4 border-t border-neutral-700">
-                  <StatsSection token={token} />
-                </div>
-              )}
-            </div>
-          )}
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M19 9l-7 7-7-7"
+                />
+              </svg>
+            </button>
+            {statsOpen && (
+              <div className="px-4 pb-4 border-t border-neutral-700">
+                <StatsSection />
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Right: Friends (1/3) */}
@@ -667,9 +629,8 @@ export default function ProfilePage() {
             </button>
           </div>
 
-          {friendsTab === "friends" && token && (
+          {friendsTab === "friends" && (
             <FriendsList
-              token={token}
               friends={friends}
               onFriendRemoved={(friendId) =>
                 setFriends((prev) =>
@@ -708,9 +669,8 @@ export default function ProfilePage() {
                 )}
               </div>
             )}
-          {friendsTab === "requests" && token && (
+          {friendsTab === "requests" && (
             <FriendRequests
-              token={token}
               incoming={incoming}
               outgoing={outgoing}
               onResponded={(friendshipId, accepted, req) => {
@@ -731,12 +691,11 @@ export default function ProfilePage() {
               }
             />
           )}
-          {friendsTab === "add" && token && (
+          {friendsTab === "add" && (
             <FriendSearch
-              token={token}
               friendIds={new Set(friends.map((f) => f.friend.id))}
               onRequestSent={() => {
-                if (token) fetchFriends(token);
+                fetchFriends();
                 setFriendsTab("requests");
               }}
             />

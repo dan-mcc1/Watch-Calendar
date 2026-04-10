@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
-import { getAuth, onAuthStateChanged } from "firebase/auth";
-import { firebaseApp } from "../firebase";
-import { API_URL } from "../constants";
+import { apiFetch } from "../utils/apiFetch";
+import { useAuthUser } from "../hooks/useAuthUser";
 import type { Movie, Show } from "../types/calendar";
 import MediaList from "../components/MediaList";
 import { usePageTitle } from "../hooks/usePageTitle";
@@ -42,20 +41,14 @@ export default function ForYou() {
 
   const PAGE_SIZE = 10;
 
-  const [currentUser, setCurrentUser] =
-    useState<ReturnType<typeof getAuth>["currentUser"]>(null);
+  const currentUser = useAuthUser();
 
   useEffect(() => {
-    const auth = getAuth(firebaseApp);
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      if (!user) {
-        setNotSignedIn(true);
-        setLoading(false);
-      }
-      setCurrentUser(user);
-    });
-    return unsubscribe;
-  }, []);
+    if (!currentUser) {
+      setNotSignedIn(true);
+      setLoading(false);
+    }
+  }, [currentUser]);
 
   useEffect(() => {
     if (!currentUser) return;
@@ -71,10 +64,7 @@ export default function ForYou() {
     }
     setLoading(true);
     setPage(1);
-    currentUser.getIdToken().then((token) =>
-      fetch(`${API_URL}/recommendations/for-you?mode=${mode}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
+    apiFetch(`/recommendations/for-you?mode=${mode}`)
         .then((r) => {
           if (!r.ok) throw new Error();
           return r.json();
@@ -89,8 +79,7 @@ export default function ForYou() {
           forYouCache.set(cacheKey, { movies, shows, seedCount });
         })
         .catch(console.error)
-        .finally(() => setLoading(false)),
-    );
+        .finally(() => setLoading(false));
   }, [currentUser, mode]);
 
   // Reset page when tab changes

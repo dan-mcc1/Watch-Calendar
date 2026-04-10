@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import type { Show, Movie } from "../types/calendar";
-import { API_URL } from "../constants";
 import MediaList from "../components/MediaList";
 import { usePageTitle } from "../hooks/usePageTitle";
+import { apiFetch } from "../utils/apiFetch";
 
 type MediaType = "movie" | "tv";
 
@@ -28,9 +28,9 @@ export default function Trending() {
       try {
         const endpoint =
           activeType === "movie"
-            ? `${API_URL}/search/movie/trending?page=${page}`
-            : `${API_URL}/search/tv/trending?page=${page}`;
-        const res = await fetch(endpoint);
+            ? `/search/movie/trending?page=${page}`
+            : `/search/tv/trending?page=${page}`;
+        const res = await apiFetch(endpoint);
         if (!res.ok) throw new Error("Failed to fetch trending");
         const data = await res.json();
         if (activeType === "movie") {

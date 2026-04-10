@@ -11,9 +11,10 @@ import {
 import { Bars3Icon, XMarkIcon } from "@heroicons/react/24/outline";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useLocation, Link, useNavigate } from "react-router-dom";
-import { onIdTokenChanged, getAuth, signOut } from "firebase/auth";
-import { firebaseApp } from "../firebase";
+import { onIdTokenChanged, signOut } from "firebase/auth";
+import { auth } from "../firebase";
 import { API_URL, BASE_IMAGE_URL, getAvatarColor } from "../constants";
+import { apiFetch } from "../utils/apiFetch";
 
 const NAV_BAR_REFRESH_TIME = 30; // amount of time between each GET for recommendations and friend requests
 
@@ -116,7 +117,6 @@ function NavDropdown({
 export default function NavBar() {
   const location = useLocation();
   const navigate = useNavigate();
-  const auth = getAuth(firebaseApp);
   const [user, setUser] = useState(auth.currentUser);
   const [mobileDiscoverOpen, setMobileDiscoverOpen] = useState(false);
   const [mobileLibraryOpen, setMobileLibraryOpen] = useState(false);
@@ -161,15 +161,14 @@ export default function NavBar() {
       setDropdownOpen(false);
       return;
     }
-    setDropdownLoading(true);
     const abort = new AbortController();
     dropdownAbortRef.current = abort;
     const timer = setTimeout(async () => {
+      setDropdownLoading(true);
       try {
-        const res = await fetch(
-          `${API_URL}/search?query=${encodeURIComponent(q)}`,
-          { signal: abort.signal },
-        );
+        const res = await apiFetch(`/search?query=${encodeURIComponent(q)}`, {
+          signal: abort.signal,
+        });
         if (res.ok) {
           const data: {
             movies: SearchResult[];
@@ -223,12 +222,11 @@ export default function NavBar() {
     return () => document.removeEventListener("mousedown", handleClick);
   }, []);
 
-  const fetchCounts = useCallback(async (token: string) => {
+  const fetchCounts = useCallback(async () => {
     try {
-      const headers = { Authorization: `Bearer ${token}` };
       const [friendsRes, recsRes] = await Promise.all([
-        fetch(`${API_URL}/friends/requests/incoming`, { headers }),
-        fetch(`${API_URL}/recommendations/unread-count`, { headers }),
+        apiFetch("/friends/requests/incoming"),
+        apiFetch("/recommendations/unread-count"),
       ]);
       if (friendsRes.ok) {
         const data: { friendship_id: number }[] = await friendsRes.json();
@@ -243,11 +241,9 @@ export default function NavBar() {
     }
   }, []);
 
-  const fetchAvatar = useCallback(async (token: string) => {
+  const fetchAvatar = useCallback(async () => {
     try {
-      const res = await fetch(`${API_URL}/user/me`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await apiFetch("/user/me");
       if (res.ok) {
         const data = await res.json();
         setAvatarKey(data.avatar_key ?? null);
@@ -272,17 +268,13 @@ export default function NavBar() {
       }
 
       setUser(currentUser);
-      const token = await currentUser.getIdToken();
-      fetchCounts(token);
-      fetchAvatar(token);
+      fetchCounts();
+      fetchAvatar();
 
       // EventSource can't send custom headers, so we exchange the Firebase token
       // for a short-lived (60s) single-use session token first, then use that
       // in the URL so the long-lived credential never appears in logs or history.
-      const tokenRes = await fetch(`${API_URL}/events/token`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const tokenRes = await apiFetch("/events/token", { method: "POST" });
       if (!tokenRes.ok) return;
       const { session_token } = await tokenRes.json();
       const es = new EventSource(
@@ -325,24 +317,13 @@ export default function NavBar() {
   //     .catch(() => {});
   // }, [location.pathname, fetchCounts]);
   useEffect(() => {
-    const currentUser = auth.currentUser;
-    if (!currentUser) return;
-
-    let isMounted = true;
+    if (!auth.currentUser) return;
 
     const interval = setInterval(() => {
-      currentUser
-        .getIdToken()
-        .then((token) => {
-          if (isMounted) fetchCounts(token);
-        })
-        .catch(() => {});
-    }, NAV_BAR_REFRESH_TIME * 1000); // every 30s (same as your throttle)
+      fetchCounts().catch(() => {});
+    }, NAV_BAR_REFRESH_TIME * 1000); // every 30s
 
-    return () => {
-      isMounted = false;
-      clearInterval(interval);
-    };
+    return () => clearInterval(interval);
   }, [fetchCounts]);
 
   // Decrement immediately when a recommendation is marked read on the same page
@@ -357,12 +338,8 @@ export default function NavBar() {
   // Re-fetch avatar when the user saves a new one from Settings
   useEffect(() => {
     function handler() {
-      const currentUser = auth.currentUser;
-      if (!currentUser) return;
-      currentUser
-        .getIdToken()
-        .then(fetchAvatar)
-        .catch(() => {});
+      if (!auth.currentUser) return;
+      fetchAvatar().catch(() => {});
     }
     window.addEventListener("avatar-updated", handler);
     return () => window.removeEventListener("avatar-updated", handler);

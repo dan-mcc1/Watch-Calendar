@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
-import { getAuth } from "firebase/auth";
-import { firebaseApp } from "../firebase";
 import { API_URL } from "../constants";
+import { apiFetch } from "../utils/apiFetch";
 
 interface Props {
   isOpen: boolean;
@@ -113,7 +112,6 @@ export default function CalendarSyncModal({ isOpen, onClose }: Props) {
   const [loading, setLoading] = useState(false);
   const [copied, setCopied] = useState(false);
   const [openInstructions, setOpenInstructions] = useState<string | null>(null);
-  const auth = getAuth(firebaseApp);
 
   useEffect(() => {
     if (!isOpen || feedUrl) return;
@@ -123,11 +121,7 @@ export default function CalendarSyncModal({ isOpen, onClose }: Props) {
   async function fetchToken() {
     setLoading(true);
     try {
-      const token = await auth.currentUser?.getIdToken();
-      if (!token) return;
-      const res = await fetch(`${API_URL}/ical/token`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await apiFetch("/ical/token");
       if (!res.ok) return;
       const data = await res.json();
       setFeedUrl(`${API_URL}/ical/feed/${data.token}`);

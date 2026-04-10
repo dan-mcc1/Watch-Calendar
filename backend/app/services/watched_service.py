@@ -1,23 +1,24 @@
 # app/services/watched_service.py
 from sqlalchemy.orm import Session
-from sqlalchemy import and_
+from sqlalchemy import and_, nullslast, nullsfirst
 from datetime import datetime
 from app.models.watched import Watched
 from app.models.movie import Movie
 from app.models.show import Show
+from app.models.genre import MovieGenre, ShowGenre
+from app.models.provider import MovieProvider, ShowProvider
 from app.services.tmdb_tv import fetch_show_from_tmdb
 from app.services.tmdb_movies import fetch_movie_from_tmdb
 from app.services.watchlist_service import (
     get_theatrical_release_date,
     serialize_show,
     serialize_movie,
-    _upsert_genres_for_show,
-    _upsert_genres_for_movie,
-    _upsert_providers_for_show,
-    _upsert_providers_for_movie,
+    _upsert_genres,
+    _upsert_providers,
     _upsert_seasons_for_show,
     _show_query_options,
     _movie_query_options,
+    _get_item_title_and_poster,
 )
 from app.services.episode_service import sync_show_episodes
 from app.services.activity_service import log_activity
@@ -26,6 +27,14 @@ from app.models.episode_watched import EpisodeWatched
 from app.models.watchlist import Watchlist
 from app.models.currently_watching import CurrentlyWatching
 from app.db.session import SessionLocal
+
+
+def _is_on_other_list(db: Session, user_id: str, content_type: str, content_id: int) -> bool:
+    """Return True if the item exists on Watchlist or CurrentlyWatching."""
+    return any(
+        db.query(t).filter_by(user_id=user_id, content_type=content_type, content_id=content_id).first() is not None
+        for t in (Watchlist, CurrentlyWatching)
+    )
 
 
 def add_to_watched(
@@ -42,16 +51,7 @@ def add_to_watched(
     if existing:
         return existing
 
-    # Only increment tracking_count if not already on any other list
-    already_tracked = (
-        db.query(Watchlist)
-        .filter_by(user_id=user_id, content_type=content_type, content_id=content_id)
-        .first()
-    ) is not None or (
-        db.query(CurrentlyWatching)
-        .filter_by(user_id=user_id, content_type=content_type, content_id=content_id)
-        .first()
-    ) is not None
+    already_tracked = _is_on_other_list(db, user_id, content_type, content_id)
 
     entry = Watched(
         user_id=user_id,
@@ -61,6 +61,9 @@ def add_to_watched(
         rating=rating,
     )
     db.add(entry)
+
+    movie = None
+    show = None
 
     if content_type == "movie":
         movie = db.query(Movie).filter_by(id=content_id).first()
@@ -99,8 +102,8 @@ def add_to_watched(
             )
             db.add(movie)
             db.flush()
-            _upsert_genres_for_movie(db, movie, movie_data.get("genres", []))
-            _upsert_providers_for_movie(db, movie, us_providers)
+            _upsert_genres(db, movie_data.get("genres", []), MovieGenre, movie_id=movie.id)
+            _upsert_providers(db, us_providers, MovieProvider, movie_id=movie.id)
 
     elif content_type == "tv":
         show = db.query(Show).filter_by(id=content_id).first()
@@ -137,23 +140,20 @@ def add_to_watched(
             )
             db.add(show)
             db.flush()
-            _upsert_genres_for_show(db, show, show_data.get("genres", []))
-            _upsert_providers_for_show(db, show, us_providers)
+            _upsert_genres(db, show_data.get("genres", []), ShowGenre, show_id=show.id)
+            _upsert_providers(db, us_providers, ShowProvider, show_id=show.id)
             _upsert_seasons_for_show(db, show, show_data.get("seasons", []))
 
-    # Log activity
-    if content_type == "movie":
-        item = db.query(Movie).filter_by(id=content_id).first()
-        log_activity(db, user_id, "watched", content_type, content_id,
-                     item.title if item else None, item.poster_path if item else None)
-    elif content_type == "tv":
-        item = db.query(Show).filter_by(id=content_id).first()
-        log_activity(db, user_id, "watched", content_type, content_id,
-                     item.name if item else None, item.poster_path if item else None)
+    if movie:
+        title, poster = movie.title, movie.poster_path
+    elif show:
+        title, poster = show.name, show.poster_path
+    else:
+        title, poster = None, None
+    log_activity(db, user_id, "watched", content_type, content_id, title, poster)
 
     db.commit()
     db.refresh(entry)
-
     return entry
 
 
@@ -228,16 +228,8 @@ def update_watched_rating(
     entry.rating = rating
 
     if rating is not None:
-        if content_type == "movie":
-            item = db.query(Movie).filter_by(id=content_id).first()
-            log_activity(db, user_id, "rated", content_type, content_id,
-                         item.title if item else None, item.poster_path if item else None,
-                         rating=rating)
-        elif content_type == "tv":
-            item = db.query(Show).filter_by(id=content_id).first()
-            log_activity(db, user_id, "rated", content_type, content_id,
-                         item.name if item else None, item.poster_path if item else None,
-                         rating=rating)
+        title, poster = _get_item_title_and_poster(db, content_type, content_id)
+        log_activity(db, user_id, "rated", content_type, content_id, title, poster, rating=rating)
 
     db.commit()
     db.refresh(entry)
@@ -257,16 +249,7 @@ def remove_from_watched(db: Session, user_id: str, content_type: str, content_id
     if entry:
         db.delete(entry)
 
-        # Only decrement tracking_count if not still on any other list
-        still_tracked = (
-            db.query(Watchlist)
-            .filter_by(user_id=user_id, content_type=content_type, content_id=content_id)
-            .first()
-        ) is not None or (
-            db.query(CurrentlyWatching)
-            .filter_by(user_id=user_id, content_type=content_type, content_id=content_id)
-            .first()
-        ) is not None
+        still_tracked = _is_on_other_list(db, user_id, content_type, content_id)
 
         if not still_tracked:
             if content_type == "movie":
@@ -289,43 +272,75 @@ def remove_from_watched(db: Session, user_id: str, content_type: str, content_id
     return {"message": "Not found in watched list"}
 
 
-def get_watched(db: Session, user_id: str):
-    movies = get_watched_movies_info(db, user_id)
-    shows = get_watched_tv_info(db, user_id)
-    return {"movies": movies, "shows": shows}
+def _watched_order_clause(sort: str, content_type: str):
+    is_movie = content_type == "movie"
+    date_col = Movie.release_date if is_movie else Show.first_air_date
+    title_col = Movie.title if is_movie else Show.name
+    rating_col = Movie.vote_average if is_movie else Show.vote_average
+    return {
+        "title_asc":        title_col.asc(),
+        "title_desc":       title_col.desc(),
+        "date_desc":        nullslast(date_col.desc()),
+        "date_asc":         nullsfirst(date_col.asc()),
+        "tmdb_rating_desc": nullslast(rating_col.desc()),
+        "tmdb_rating_asc":  nullsfirst(rating_col.asc()),
+        "rating_desc":      nullslast(Watched.rating.desc()),
+        "rating_asc":       nullsfirst(Watched.rating.asc()),
+        "watched_desc":     Watched.watched_at.desc(),
+        "watched_asc":      Watched.watched_at.asc(),
+    }.get(sort, Watched.watched_at.desc())
 
 
-def get_watched_movies_info(db: Session, user_id: str):
-    rows = (
-        db.query(Movie, Watched.rating)
-        .options(*_movie_query_options())
+def get_watched(db: Session, user_id: str, *, page: int = 1, per_page: int = 0, sort: str = "watched_desc", search: str = ""):
+    movies, movies_total = _get_watched_items(db, user_id, "movie", page=page, per_page=per_page, sort=sort, search=search)
+    shows, shows_total = _get_watched_items(db, user_id, "tv", page=page, per_page=per_page, sort=sort, search=search)
+    return {
+        "movies": movies,
+        "movies_total": movies_total,
+        "shows": shows,
+        "shows_total": shows_total,
+        "page": page,
+        "per_page": per_page,
+    }
+
+
+def _get_watched_items(
+    db: Session,
+    user_id: str,
+    content_type: str,
+    *,
+    page: int = 1,
+    per_page: int = 0,
+    sort: str = "watched_desc",
+    search: str = "",
+):
+    if content_type == "tv":
+        model, options, content_id_col, serialize = Show, _show_query_options(), Show.id, serialize_show
+        title_col = Show.name
+    else:
+        model, options, content_id_col, serialize = Movie, _movie_query_options(), Movie.id, serialize_movie
+        title_col = Movie.title
+
+    q = (
+        db.query(model, Watched.rating)
+        .options(*options)
         .select_from(Watched)
-        .join(
-            Movie,
-            and_(
-                Watched.content_id == Movie.id,
-                Watched.content_type == "movie",
-                Watched.user_id == user_id,
-            ),
-        )
-        .all()
+        .join(model, and_(
+            Watched.content_id == content_id_col,
+            Watched.content_type == content_type,
+            Watched.user_id == user_id,
+        ))
     )
-    return [{**serialize_movie(movie), "user_rating": rating} for movie, rating in rows]
 
+    if search:
+        q = q.filter(title_col.ilike(f"%{search}%"))
 
-def get_watched_tv_info(db: Session, user_id: str):
-    rows = (
-        db.query(Show, Watched.rating)
-        .options(*_show_query_options())
-        .select_from(Watched)
-        .join(
-            Show,
-            and_(
-                Watched.content_id == Show.id,
-                Watched.content_type == "tv",
-                Watched.user_id == user_id,
-            ),
-        )
-        .all()
-    )
-    return [{**serialize_show(show), "user_rating": rating} for show, rating in rows]
+    q = q.order_by(_watched_order_clause(sort, content_type))
+
+    total = q.count()
+
+    if per_page > 0:
+        q = q.offset((page - 1) * per_page).limit(per_page)
+
+    rows = q.all()
+    return [{**serialize(item), "user_rating": rating} for item, rating in rows], total

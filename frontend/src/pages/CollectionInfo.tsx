@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
-import { BASE_IMAGE_URL, API_URL } from "../constants";
+import { BASE_IMAGE_URL } from "../constants";
 import type { Collection, Movie } from "../types/calendar";
 import { usePageTitle } from "../hooks/usePageTitle";
 import MediaList from "../components/MediaList";
+import { apiFetch } from "../utils/apiFetch";
 
 function formatRuntime(minutes: number) {
   const h = Math.floor(minutes / 60);
@@ -24,7 +25,7 @@ export default function CollectionInfo() {
     async function fetchCollection() {
       try {
         setLoading(true);
-        const res = await fetch(`${API_URL}/collections/${id}`);
+        const res = await apiFetch(`/collections/${id}`);
         if (!res.ok) throw new Error("Collection not found");
         const data = await res.json();
         data.parts = (data.parts ?? []).sort((a: Movie, b: Movie) =>

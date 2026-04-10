@@ -1,6 +1,6 @@
 import { useParams } from "react-router-dom";
 import { useEffect, useState } from "react";
-import { BASE_IMAGE_URL, API_URL } from "../constants";
+import { BASE_IMAGE_URL } from "../constants";
 import type { Show } from "../types/calendar";
 import { parseLocalDate, formatLocalDate } from "../utils/date";
 import SeasonInfo from "../components/SeasonInfo";
@@ -12,9 +12,14 @@ import { getCachedStatuses, mergeCachedStatuses } from "../utils/statusCache";
 import FavoriteButton from "../components/FavoriteButton";
 import RecommendButton from "../components/RecommendButton";
 import ReviewsSection from "../components/ReviewsSection";
-import { firebaseApp } from "../firebase";
-import { getAuth, onAuthStateChanged } from "firebase/auth";
+import { useAuthUser } from "../hooks/useAuthUser";
+import { apiFetch } from "../utils/apiFetch";
 import { usePageTitle } from "../hooks/usePageTitle";
+import {
+  RatingBadge,
+  StatBox,
+  ExternalLink,
+} from "../components/InfoPageWidgets";
 
 type FullShowData = Show & {
   vote_average?: number;
@@ -64,61 +69,6 @@ interface AggregateRating {
   count: number;
 }
 
-function RatingBadge({
-  label,
-  value,
-  color,
-}: {
-  label: string;
-  value: string;
-  color: string;
-}) {
-  return (
-    <div
-      className={`flex flex-col items-center bg-neutral-800 border rounded-xl px-4 py-3 min-w-[80px] ${color}`}
-    >
-      <span className="text-neutral-100 font-bold text-lg leading-tight">
-        {value}
-      </span>
-      <span className="text-neutral-500 text-xs mt-0.5 whitespace-nowrap">
-        {label}
-      </span>
-    </div>
-  );
-}
-
-function StatBox({
-  label,
-  value,
-}: {
-  label: string;
-  value: string | number | null | undefined;
-}) {
-  if (!value && value !== 0) return null;
-  return (
-    <div className="flex flex-col items-center bg-neutral-800 border border-neutral-700 rounded-xl px-4 py-3 min-w-[80px]">
-      <span className="text-neutral-100 font-bold text-lg leading-tight">
-        {value}
-      </span>
-      <span className="text-neutral-500 text-xs mt-0.5 whitespace-nowrap">
-        {label}
-      </span>
-    </div>
-  );
-}
-
-function ExternalLink({ href, label }: { href: string; label: string }) {
-  return (
-    <a
-      href={href}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="inline-flex items-center gap-1.5 text-sm text-neutral-400 hover:text-primary-400 bg-neutral-800 border border-neutral-700 hover:border-primary-600/50 px-3 py-1.5 rounded-lg transition-all duration-150"
-    >
-      {label}
-    </a>
-  );
-}
 
 export default function ShowInfo() {
   const { id } = useParams<{ id: string }>();
@@ -126,8 +76,7 @@ export default function ShowInfo() {
   usePageTitle(show?.name);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const auth = getAuth(firebaseApp);
-  const [user, setUser] = useState(auth.currentUser);
+  const user = useAuthUser();
   const [initialStatus, setInitialStatus] = useState<WatchStatus | undefined>(
     undefined,
   );
@@ -142,12 +91,13 @@ export default function ShowInfo() {
   const [episodeRefreshKey, setEpisodeRefreshKey] = useState(0);
   const [watchButtonRefreshKey, setWatchButtonRefreshKey] = useState(0);
 
+  // Reset status when navigating to a different show
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (u) => {
-      setUser(u);
-    });
-    return unsubscribe;
-  }, [auth]);
+    setShow(null);
+    setInitialStatus(undefined);
+    setInitialRating(undefined);
+    setStatusReady(false);
+  }, [id]);
 
   useEffect(() => {
     if (!user || !show) return;
@@ -159,26 +109,21 @@ export default function ShowInfo() {
       setStatusReady(true);
       return;
     }
-    user.getIdToken().then((token) =>
-      fetch(`${API_URL}/watchlist/status/bulk`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
+    apiFetch("/watchlist/status/bulk", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(missing),
+    })
+      .then((r) => (r.ok ? r.json() : {}))
+      .then(
+        (data: Record<string, { status: string; rating: number | null }>) => {
+          mergeCachedStatuses(user.uid, data);
+          setInitialStatus(data[`tv:${show.id}`]?.status as WatchStatus);
+          setInitialRating(data[`tv:${show.id}`]?.rating ?? null);
         },
-        body: JSON.stringify(missing),
-      })
-        .then((r) => (r.ok ? r.json() : {}))
-        .then(
-          (data: Record<string, { status: string; rating: number | null }>) => {
-            mergeCachedStatuses(user.uid, data);
-            setInitialStatus(data[`tv:${show.id}`]?.status as WatchStatus);
-            setInitialRating(data[`tv:${show.id}`]?.rating ?? null);
-          },
-        )
-        .catch(() => {})
-        .finally(() => setStatusReady(true)),
-    );
+      )
+      .catch(() => {})
+      .finally(() => setStatusReady(true));
   }, [user, show]);
 
   useEffect(() => {
@@ -186,7 +131,7 @@ export default function ShowInfo() {
     async function fetchShow() {
       try {
         setLoading(true);
-        const res = await fetch(`${API_URL}/tv/${id}/full`);
+        const res = await apiFetch(`/tv/${id}/full`);
         if (!res.ok) throw new Error("Failed to fetch show info");
         const rawData = await res.json();
         let data: FullShowData;
@@ -200,15 +145,15 @@ export default function ShowInfo() {
         }
         setShow(data);
         // Fetch aggregate ratings
-        fetch(`${API_URL}/reviews/aggregate?content_type=tv&content_id=${id}`)
+        apiFetch(`/reviews/aggregate?content_type=tv&content_id=${id}`)
           .then((r) => r.json())
           .then(setAggRating)
           .catch(() => {});
         // Fetch RT/Metacritic via OMDB if we have an imdb_id
         const imdbId = data.external_ids?.imdb_id;
         if (imdbId) {
-          fetch(
-            `${API_URL}/reviews/external-scores?imdb_id=${encodeURIComponent(imdbId)}`,
+          apiFetch(
+            `/reviews/external-scores?imdb_id=${encodeURIComponent(imdbId)}`,
           )
             .then((r) => r.json())
             .then(

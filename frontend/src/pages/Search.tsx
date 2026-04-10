@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import { useLocation } from "react-router-dom";
 import type { Show, Movie, Person, CollectionResult } from "../types/calendar";
-import { API_URL } from "../constants";
 import MediaList from "../components/MediaList";
 import { usePageTitle } from "../hooks/usePageTitle";
+import { apiFetch } from "../utils/apiFetch";
 
 type Tab = "all" | "movies" | "tv" | "people" | "collections";
 
@@ -38,8 +38,8 @@ export default function Search() {
     async function fetchResults() {
       setLoading(true);
       try {
-        const res = await fetch(
-          `${API_URL}/search?query=${encodeURIComponent(query)}`,
+        const res = await apiFetch(
+          `/search?query=${encodeURIComponent(query)}`,
         );
         if (!res.ok) throw new Error("Failed to fetch search results");
         const data = await res.json();

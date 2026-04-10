@@ -10,7 +10,7 @@ import {
 } from "firebase/auth";
 import { auth } from "../firebase";
 import { useNavigate } from "react-router-dom";
-import { API_URL } from "../constants";
+import { apiFetch } from "../utils/apiFetch";
 import { usePageTitle } from "../hooks/usePageTitle";
 
 const USERNAME_RE = /^[a-zA-Z0-9_]{3,30}$/;
@@ -22,16 +22,23 @@ const SignIn: React.FC = () => {
   const [password, setPassword] = useState("");
   const [username, setUsername] = useState("");
   const [isRegistering, setIsRegistering] = useState(false);
-  const [usernameAvailable, setUsernameAvailable] = useState<boolean | null>(null);
+  const [usernameAvailable, setUsernameAvailable] = useState<boolean | null>(
+    null,
+  );
   const [usernameChecking, setUsernameChecking] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [resetSent, setResetSent] = useState(false);
 
   // OAuth username step state
-  const [pendingOAuth, setPendingOAuth] = useState<{ uid: string; email: string | null } | null>(null);
+  const [pendingOAuth, setPendingOAuth] = useState<{
+    uid: string;
+    email: string | null;
+  } | null>(null);
   const [oauthUsername, setOauthUsername] = useState("");
-  const [oauthUsernameAvailable, setOauthUsernameAvailable] = useState<boolean | null>(null);
+  const [oauthUsernameAvailable, setOauthUsernameAvailable] = useState<
+    boolean | null
+  >(null);
   const [oauthUsernameChecking, setOauthUsernameChecking] = useState(false);
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -56,8 +63,8 @@ const SignIn: React.FC = () => {
     }
     setChecking(true);
     try {
-      const res = await fetch(
-        `${API_URL}/user/check-username?username=${encodeURIComponent(value)}`,
+      const res = await apiFetch(
+        `/user/check-username?username=${encodeURIComponent(value)}`,
       );
       const data = await res.json();
       setAvailable(data.available);
@@ -75,7 +82,8 @@ const SignIn: React.FC = () => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     if (value.length >= 3) {
       debounceRef.current = setTimeout(
-        () => checkAvailability(value, setUsernameAvailable, setUsernameChecking),
+        () =>
+          checkAvailability(value, setUsernameAvailable, setUsernameChecking),
         400,
       );
     }
@@ -88,7 +96,12 @@ const SignIn: React.FC = () => {
     if (oauthDebounceRef.current) clearTimeout(oauthDebounceRef.current);
     if (value.length >= 3) {
       oauthDebounceRef.current = setTimeout(
-        () => checkAvailability(value, setOauthUsernameAvailable, setOauthUsernameChecking),
+        () =>
+          checkAvailability(
+            value,
+            setOauthUsernameAvailable,
+            setOauthUsernameChecking,
+          ),
         400,
       );
     }
@@ -98,12 +111,10 @@ const SignIn: React.FC = () => {
     user: import("firebase/auth").User,
     username: string,
   ) {
-    const token = await user.getIdToken();
-    const res = await fetch(`${API_URL}/user/create`, {
+    const res = await apiFetch("/user/create", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
       },
       body: JSON.stringify({ email: user.email, username }),
     });
@@ -124,7 +135,10 @@ const SignIn: React.FC = () => {
       await sendPasswordResetEmail(auth, email.trim());
       setResetSent(true);
     } catch (err: any) {
-      if (err.code === "auth/user-not-found" || err.code === "auth/invalid-email") {
+      if (
+        err.code === "auth/user-not-found" ||
+        err.code === "auth/invalid-email"
+      ) {
         // Don't reveal whether the email exists
         setResetSent(true);
       } else {
@@ -191,12 +205,10 @@ const SignIn: React.FC = () => {
   async function handleOAuthResult(user: import("firebase/auth").User) {
     // Check if user already exists in backend with a username
     try {
-      const token = await user.getIdToken();
-      const res = await fetch(`${API_URL}/user/create`, {
+      const res = await apiFetch("/user/create", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({ email: user.email }),
       });
@@ -221,7 +233,9 @@ const SignIn: React.FC = () => {
     setErrorMessage(null);
 
     if (!USERNAME_RE.test(oauthUsername)) {
-      setErrorMessage("Username must be 3–30 characters: letters, numbers, or underscores only.");
+      setErrorMessage(
+        "Username must be 3–30 characters: letters, numbers, or underscores only.",
+      );
       return;
     }
     if (oauthUsernameAvailable === false) {
@@ -231,16 +245,10 @@ const SignIn: React.FC = () => {
 
     setIsLoading(true);
     try {
-      const token = await auth.currentUser?.getIdToken();
-      if (!token) {
-        setErrorMessage("Session expired, please sign in again.");
-        return;
-      }
-      const res = await fetch(`${API_URL}/user/update-username`, {
+      const res = await apiFetch("/user/update-username", {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({ new_username: oauthUsername }),
       });
@@ -318,8 +326,12 @@ const SignIn: React.FC = () => {
       <div className="flex-1 flex items-center justify-center px-4 py-12">
         <div className="w-full max-w-md">
           <div className="text-center mb-8">
-            <h1 className="text-3xl font-bold text-white mb-1">Release Radar</h1>
-            <p className="text-neutral-400 text-sm">Choose a username to complete sign-up</p>
+            <h1 className="text-3xl font-bold text-white mb-1">
+              Release Radar
+            </h1>
+            <p className="text-neutral-400 text-sm">
+              Choose a username to complete sign-up
+            </p>
           </div>
           <div className="bg-neutral-800 border border-neutral-700 rounded-2xl shadow-xl p-8">
             <form onSubmit={handleOAuthUsernameSubmit} className="space-y-4">

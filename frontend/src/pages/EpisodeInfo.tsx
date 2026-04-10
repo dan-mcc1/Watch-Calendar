@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
-import { getAuth, onAuthStateChanged } from "firebase/auth";
-import { firebaseApp } from "../firebase";
-import { API_URL, BASE_IMAGE_URL } from "../constants";
+import { BASE_IMAGE_URL } from "../constants";
+import { apiFetch } from "../utils/apiFetch";
+import { useAuthUser } from "../hooks/useAuthUser";
 import { usePageTitle } from "../hooks/usePageTitle";
 
 interface CastMember {
@@ -135,23 +135,9 @@ export default function EpisodeInfo() {
   const [error, setError] = useState<string | null>(null);
   const [watched, setWatched] = useState(false);
   const [toggling, setToggling] = useState(false);
-  const [token, setToken] = useState<string | null>(null);
-
   usePageTitle(data ? `${data.name}` : "Episode");
 
-  const auth = getAuth(firebaseApp);
-
-  useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async (u) => {
-      if (!u) {
-        setToken(null);
-        return;
-      }
-      const tok = await u.getIdToken();
-      setToken(tok);
-    });
-    return unsub;
-  }, []);
+  const user = useAuthUser();
 
   // Fetch episode details + show name in parallel
   useEffect(() => {
@@ -160,13 +146,13 @@ export default function EpisodeInfo() {
     setError(null);
 
     Promise.all([
-      fetch(`${API_URL}/tv/${showId}/season/${season}/episode/${episode}`).then(
+      apiFetch(`/tv/${showId}/season/${season}/episode/${episode}`).then(
         (r) => {
           if (!r.ok) throw new Error("Episode not found");
           return r.json();
         },
       ),
-      fetch(`${API_URL}/tv/${showId}`).then((r) => (r.ok ? r.json() : null)),
+      apiFetch(`/tv/${showId}`).then((r) => (r.ok ? r.json() : null)),
     ])
       .then(([epData, showData]) => {
         setData(epData);
@@ -179,10 +165,8 @@ export default function EpisodeInfo() {
 
   // Check if this episode is already watched
   useEffect(() => {
-    if (!token || !showId) return;
-    fetch(`${API_URL}/watched-episode/${showId}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
+    if (!user || !showId) return;
+    apiFetch(`/watched-episode/${showId}`)
       .then((r) => (r.ok ? r.json() : []))
       .then((eps: { season_number: number; episode_number: number }[]) => {
         setWatched(
@@ -194,21 +178,17 @@ export default function EpisodeInfo() {
         );
       })
       .catch(() => {});
-  }, [token, showId, season, episode]);
+  }, [user, showId, season, episode]);
 
   async function toggleWatched() {
-    if (!token || !showId || toggling) return;
+    if (!user || !showId || toggling) return;
     setToggling(true);
     const wasWatched = watched;
     setWatched(!wasWatched);
     try {
-      const url = wasWatched
-        ? `${API_URL}/watched-episode/remove`
-        : `${API_URL}/watched-episode/add`;
-      const method = wasWatched ? "DELETE" : "POST";
-      const res = await fetch(
-        `${url}?show_id=${showId}&season_number=${season}&episode_number=${episode}`,
-        { method, headers: { Authorization: `Bearer ${token}` } },
+      const res = await apiFetch(
+        `/${wasWatched ? "watched-episode/remove" : "watched-episode/add"}?show_id=${showId}&season_number=${season}&episode_number=${episode}`,
+        { method: wasWatched ? "DELETE" : "POST" },
       );
       if (!res.ok) throw new Error();
     } catch {
@@ -351,51 +331,49 @@ export default function EpisodeInfo() {
           </div>
 
           {/* Watched toggle */}
-          {token && (
-            <button
-              onClick={toggleWatched}
-              disabled={toggling}
-              className={`flex-shrink-0 flex items-center gap-2 px-4 py-2 rounded-xl font-medium text-sm transition-all disabled:opacity-50 ${
-                watched
-                  ? "bg-success-700/30 border border-success-600/50 text-success-400 hover:bg-error-900/30 hover:border-error-600/40 hover:text-error-400"
-                  : "bg-neutral-800 border border-neutral-600 text-neutral-300 hover:bg-success-900/30 hover:border-success-600/40 hover:text-success-400"
-              }`}
-            >
-              {toggling ? (
-                <span className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
-              ) : watched ? (
-                <svg
-                  className="w-4 h-4"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth={2.5}
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M5 13l4 4L19 7"
-                  />
-                </svg>
-              ) : (
-                <svg
-                  className="w-4 h-4"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth={2}
-                >
-                  <circle cx="12" cy="12" r="9" />
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M5 13l4 4L19 7"
-                  />
-                </svg>
-              )}
-              {watched ? "Watched" : "Mark Watched"}
-            </button>
-          )}
+          <button
+            onClick={toggleWatched}
+            disabled={toggling}
+            className={`flex-shrink-0 flex items-center gap-2 px-4 py-2 rounded-xl font-medium text-sm transition-all disabled:opacity-50 ${
+              watched
+                ? "bg-success-700/30 border border-success-600/50 text-success-400 hover:bg-error-900/30 hover:border-error-600/40 hover:text-error-400"
+                : "bg-neutral-800 border border-neutral-600 text-neutral-300 hover:bg-success-900/30 hover:border-success-600/40 hover:text-success-400"
+            }`}
+          >
+            {toggling ? (
+              <span className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+            ) : watched ? (
+              <svg
+                className="w-4 h-4"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={2.5}
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M5 13l4 4L19 7"
+                />
+              </svg>
+            ) : (
+              <svg
+                className="w-4 h-4"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={2}
+              >
+                <circle cx="12" cy="12" r="9" />
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M5 13l4 4L19 7"
+                />
+              </svg>
+            )}
+            {watched ? "Watched" : "Mark Watched"}
+          </button>
         </div>
       </div>
 

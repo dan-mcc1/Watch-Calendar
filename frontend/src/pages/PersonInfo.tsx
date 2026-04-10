@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
-import { BASE_IMAGE_URL, API_URL } from "../constants";
+import { BASE_IMAGE_URL } from "../constants";
 import type { Movie, Show } from "../types/calendar";
 import { formatLocalDate } from "../utils/date";
 import { usePageTitle } from "../hooks/usePageTitle";
+import { apiFetch } from "../utils/apiFetch";
 
 type FullPersonData = {
   id: number;
@@ -118,7 +119,7 @@ export default function PersonInfo() {
     async function getData() {
       try {
         setLoading(true);
-        const res = await fetch(`${API_URL}/person/${id}/info`);
+        const res = await apiFetch(`/person/${id}/info`);
         if (!res.ok) throw new Error("Failed to fetch person");
         setPerson(await res.json());
       } catch (err: any) {

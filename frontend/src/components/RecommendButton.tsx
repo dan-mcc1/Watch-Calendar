@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef } from "react";
-import { getAuth } from "firebase/auth";
-import { firebaseApp } from "../firebase";
-import { API_URL } from "../constants";
+import { useAuthUser } from "../hooks/useAuthUser";
+import { apiFetch } from "../utils/apiFetch";
 
 interface Friend {
   friendship_id: number;
@@ -21,7 +20,7 @@ export default function RecommendButton({
   contentTitle,
   contentPosterPath,
 }: RecommendButtonProps) {
-  const auth = getAuth(firebaseApp);
+  const user = useAuthUser();
   const [open, setOpen] = useState(false);
   const [friends, setFriends] = useState<Friend[]>([]);
   const [loadingFriends, setLoadingFriends] = useState(false);
@@ -51,14 +50,10 @@ export default function RecommendButton({
     setSelected(null);
     setMessage("");
 
-    const user = auth.currentUser;
     if (!user) return;
     setLoadingFriends(true);
     try {
-      const token = await user.getIdToken();
-      const res = await fetch(`${API_URL}/friends/`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await apiFetch("/friends/");
       if (res.ok) setFriends(await res.json());
     } catch {
       setError("Could not load friends.");
@@ -77,18 +72,13 @@ export default function RecommendButton({
 
   async function handleSend() {
     if (!selected) return;
-    const user = auth.currentUser;
     if (!user) return;
     setSending(true);
     setError(null);
     try {
-      const token = await user.getIdToken();
-      const res = await fetch(`${API_URL}/recommendations/send`, {
+      const res = await apiFetch("/recommendations/send", {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           recipient_username: selected,
           content_type: contentType,
@@ -111,7 +101,7 @@ export default function RecommendButton({
     }
   }
 
-  if (!auth.currentUser) return null;
+  if (!user) return null;
 
   return (
     <>

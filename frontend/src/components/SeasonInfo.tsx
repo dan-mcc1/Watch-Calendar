@@ -1,8 +1,8 @@
-import { API_URL, BASE_IMAGE_URL } from "../constants";
+import { BASE_IMAGE_URL } from "../constants";
 import { Season, Episode } from "../types/calendar";
-import { useState, useEffect, useRef } from "react";
-import { getAuth } from "firebase/auth";
-import { firebaseApp } from "../firebase";
+import { useState, useEffect } from "react";
+import { useAuthUser } from "../hooks/useAuthUser";
+import { apiFetch } from "../utils/apiFetch";
 import { Link } from "react-router-dom";
 
 type FullSeason = Season & { episodes?: Episode[] };
@@ -63,7 +63,7 @@ export default function SeasonInfo({
   refreshKey,
   onEpisodeToggle,
 }: SeasonInfoProps) {
-  const auth = getAuth(firebaseApp);
+  const user = useAuthUser();
 
   const [expandedSeasons, setExpandedSeasons] = useState<
     Record<number, FullSeason | null>
@@ -82,19 +82,11 @@ export default function SeasonInfo({
   const [togglingSeasons, setTogglingSeasons] = useState<Set<number>>(
     new Set(),
   );
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const authUserRef = useRef<{ getIdToken: () => Promise<string> } | null>(
-    null,
-  );
+  const isLoggedIn = !!user;
 
-  async function fetchWatchedEpisodes(user: {
-    getIdToken: () => Promise<string>;
-  }) {
+  async function fetchWatchedEpisodes(signal?: AbortSignal) {
     try {
-      const token = await user.getIdToken();
-      const res = await fetch(`${API_URL}/watched-episode/${showId}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await apiFetch(`/watched-episode/${showId}`, { signal });
       if (!res.ok) return;
       const data: { season_number: number; episode_number: number }[] =
         await res.json();
@@ -102,27 +94,27 @@ export default function SeasonInfo({
         new Set(data.map((e) => epKey(e.season_number, e.episode_number))),
       );
     } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") return;
       console.error("Failed to load watched episodes", err);
     }
   }
 
   useEffect(() => {
-    const unsubscribe = auth.onAuthStateChanged(async (user) => {
-      authUserRef.current = user;
-      if (!user) {
-        setIsLoggedIn(false);
-        setWatchedEpisodes(new Set());
-        return;
-      }
-      setIsLoggedIn(true);
-      fetchWatchedEpisodes(user);
-    });
-    return unsubscribe;
-  }, [showId]);
+    if (!user) {
+      setWatchedEpisodes(new Set());
+      return;
+    }
+    const controller = new AbortController();
+    fetchWatchedEpisodes(controller.signal);
+    return () => controller.abort();
+  }, [showId, user]);
 
   useEffect(() => {
     if (refreshKey === undefined || refreshKey === 0) return;
-    if (authUserRef.current) fetchWatchedEpisodes(authUserRef.current);
+    if (!user) return;
+    const controller = new AbortController();
+    fetchWatchedEpisodes(controller.signal);
+    return () => controller.abort();
   }, [refreshKey]);
 
   const toggleSeason = async (season: Season) => {
@@ -132,8 +124,8 @@ export default function SeasonInfo({
     }
     try {
       setLoadingSeasons((prev) => ({ ...prev, [season.season_number]: true }));
-      const res = await fetch(
-        `${API_URL}/tv/${showId}/season/${season.season_number}/info`,
+      const res = await apiFetch(
+        `/tv/${showId}/season/${season.season_number}/info`,
       );
       if (!res.ok) throw new Error("Failed to fetch season info");
       const data: FullSeason = await res.json();
@@ -150,7 +142,6 @@ export default function SeasonInfo({
     seasonNumber: number,
     episodeNumber: number,
   ) => {
-    const user = auth.currentUser;
     if (!user) return;
 
     const key = epKey(seasonNumber, episodeNumber);
@@ -166,14 +157,13 @@ export default function SeasonInfo({
     });
 
     try {
-      const token = await user.getIdToken();
-      const url = alreadyWatched
-        ? `${API_URL}/watched-episode/remove`
-        : `${API_URL}/watched-episode/add`;
+      const path = alreadyWatched
+        ? `/watched-episode/remove`
+        : `/watched-episode/add`;
       const method = alreadyWatched ? "DELETE" : "POST";
-      const res = await fetch(
-        `${url}?show_id=${showId}&season_number=${seasonNumber}&episode_number=${episodeNumber}`,
-        { method, headers: { Authorization: `Bearer ${token}` } },
+      const res = await apiFetch(
+        `${path}?show_id=${showId}&season_number=${seasonNumber}&episode_number=${episodeNumber}`,
+        { method },
       );
       if (!res.ok) throw new Error("Request failed");
       onEpisodeToggle?.();
@@ -196,22 +186,20 @@ export default function SeasonInfo({
   };
 
   const toggleSeasonWatched = async (season: Season, allWatched: boolean) => {
-    const user = auth.currentUser;
     if (!user) return;
 
     setTogglingSeasons((prev) => new Set(prev).add(season.season_number));
     try {
-      const token = await user.getIdToken();
-      const url = allWatched
-        ? `${API_URL}/watched-episode/season/remove`
-        : `${API_URL}/watched-episode/season/add`;
+      const path = allWatched
+        ? `/watched-episode/season/remove`
+        : `/watched-episode/season/add`;
       const method = allWatched ? "DELETE" : "POST";
-      const res = await fetch(
-        `${url}?show_id=${showId}&season_number=${season.season_number}`,
-        { method, headers: { Authorization: `Bearer ${token}` } },
+      const res = await apiFetch(
+        `${path}?show_id=${showId}&season_number=${season.season_number}`,
+        { method },
       );
       if (!res.ok) throw new Error("Request failed");
-      await fetchWatchedEpisodes(user);
+      await fetchWatchedEpisodes();
       onEpisodeToggle?.();
     } catch (err) {
       console.error(err);

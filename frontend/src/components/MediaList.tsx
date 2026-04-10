@@ -1,10 +1,10 @@
-import { BASE_IMAGE_URL, API_URL } from "../constants";
+import { BASE_IMAGE_URL } from "../constants";
 import { Link } from "react-router-dom";
 import { Movie, Show, Person, CollectionResult } from "../types/calendar";
 import { parseLocalDate } from "../utils/date";
 import { useState, useEffect } from "react";
-import { getAuth } from "firebase/auth";
-import { firebaseApp } from "../firebase";
+import { useAuthUser } from "../hooks/useAuthUser";
+import { apiFetch } from "../utils/apiFetch";
 import WatchButton, { WatchStatus } from "./WatchButton";
 import { getCachedStatuses, mergeCachedStatuses } from "../utils/statusCache";
 
@@ -373,12 +373,13 @@ export default function MediaList({
   showWatchButton = true,
   paginated = false,
 }: MediaListProps) {
+  const user = useAuthUser();
   const [visibleCounts, setVisibleCounts] = useState<Record<string, number>>(
     {},
   );
   // undefined = not yet fetched, {} = fetched (user logged out or no items)
   const [statusMap, setStatusMap] = useState<StatusMap | undefined>(undefined);
-  const [isSignedIn, setIsSignedIn] = useState(false);
+  const isSignedIn = !!user;
 
   const movies = results.movies ?? [];
   const shows = results.shows ?? [];
@@ -397,53 +398,42 @@ export default function MediaList({
       ...shows.map((s) => ({ content_type: "tv", content_id: s.id })),
     ];
 
-    const auth = getAuth(firebaseApp);
-    // onAuthStateChanged fires immediately with the cached user (or null)
-    const unsubscribe = auth.onAuthStateChanged((user) => {
-      setIsSignedIn(!!user);
-      if (!user || !items.length) {
-        setStatusMap({});
-        return;
-      }
-      const { cached, missing } = getCachedStatuses(user.uid, items);
-      if (!missing.length) {
+    if (!user || !items.length) {
+      setStatusMap({});
+      return;
+    }
+    const { cached, missing } = getCachedStatuses(user.uid, items);
+    if (!missing.length) {
+      setStatusMap(
+        cached as Record<
+          string,
+          { status: WatchStatus; rating: number | null }
+        >,
+      );
+      return;
+    }
+    apiFetch("/watchlist/status/bulk", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(missing),
+    })
+      .then((r) => (r.ok ? r.json() : {}))
+      .then((data) => {
+        mergeCachedStatuses(user.uid, data);
+        setStatusMap({ ...cached, ...data } as Record<
+          string,
+          { status: WatchStatus; rating: number | null }
+        >);
+      })
+      .catch(() =>
         setStatusMap(
           cached as Record<
             string,
             { status: WatchStatus; rating: number | null }
           >,
-        );
-        return;
-      }
-      user.getIdToken().then((token) =>
-        fetch(`${API_URL}/watchlist/status/bulk`, {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(missing),
-        })
-          .then((r) => (r.ok ? r.json() : {}))
-          .then((data) => {
-            mergeCachedStatuses(user.uid, data);
-            setStatusMap({ ...cached, ...data } as Record<
-              string,
-              { status: WatchStatus; rating: number | null }
-            >);
-          })
-          .catch(() =>
-            setStatusMap(
-              cached as Record<
-                string,
-                { status: WatchStatus; rating: number | null }
-              >,
-            ),
-          ),
+        ),
       );
-    });
-    return unsubscribe;
-  }, [movies, shows, showWatchButton]);
+  }, [movies, shows, showWatchButton, user]);
 
   if (
     movies.length === 0 &&

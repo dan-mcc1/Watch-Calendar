@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { API_URL, BASE_IMAGE_URL } from "../constants";
+import { BASE_IMAGE_URL } from "../constants";
+import { apiFetch } from "../utils/apiFetch";
 import { usePageTitle } from "../hooks/usePageTitle";
 
 interface BoxOfficeMovie {
@@ -71,9 +72,9 @@ export default function BoxOffice() {
       try {
         const url =
           mode === "yearly"
-            ? `${API_URL}/box-office/yearly?year=${year}&limit=${MOVIE_LIMIT}`
-            : `${API_URL}/box-office/monthly?year=${year}&month=${month}&limit=${MOVIE_LIMIT}`;
-        const res = await fetch(url);
+            ? `/box-office/yearly?year=${year}&limit=${MOVIE_LIMIT}`
+            : `/box-office/monthly?year=${year}&month=${month}&limit=${MOVIE_LIMIT}`;
+        const res = await apiFetch(url);
         if (!res.ok) throw new Error("Failed to fetch box office data");
         const data: BoxOfficeMovie[] = await res.json();
         setMovies(data);

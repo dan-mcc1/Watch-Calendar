@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
-import { getAuth } from "firebase/auth";
-import { firebaseApp } from "../firebase";
-import { API_URL } from "../constants";
+import { useAuthUser } from "../hooks/useAuthUser";
+import { apiFetch } from "../utils/apiFetch";
 
 interface FavoriteButtonProps {
   contentType: "movie" | "tv";
@@ -9,40 +8,28 @@ interface FavoriteButtonProps {
 }
 
 export default function FavoriteButton({ contentType, contentId }: FavoriteButtonProps) {
-  const auth = getAuth(firebaseApp);
+  const user = useAuthUser();
   const [favorited, setFavorited] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const user = auth.currentUser;
     if (!user) { setLoading(false); return; }
-
-    user.getIdToken().then((token) => {
-      fetch(
-        `${API_URL}/favorites/status?content_type=${contentType}&content_id=${contentId}`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      )
-        .then((r) => r.json())
-        .then((data) => setFavorited(data.favorited ?? false))
-        .catch(() => {})
-        .finally(() => setLoading(false));
-    });
-  }, [contentType, contentId]);
+    apiFetch(`/favorites/status?content_type=${contentType}&content_id=${contentId}`)
+      .then((r) => r.json())
+      .then((data) => setFavorited(data.favorited ?? false))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [contentType, contentId, user]);
 
   async function toggle() {
-    const user = auth.currentUser;
     if (!user) return;
-    const token = await user.getIdToken();
     const next = !favorited;
     setFavorited(next);
 
     try {
-      await fetch(`${API_URL}/favorites/${next ? "add" : "remove"}`, {
+      await apiFetch(`/favorites/${next ? "add" : "remove"}`, {
         method: next ? "POST" : "DELETE",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ content_type: contentType, content_id: contentId }),
       });
     } catch {

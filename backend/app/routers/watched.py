@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Body, BackgroundTasks, HTTPException, Request
+from fastapi import APIRouter, Depends, Body, BackgroundTasks, HTTPException, Request, Query
 from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.services.watched_service import (
@@ -7,8 +7,7 @@ from app.services.watched_service import (
     sync_watched_episodes_bg,
     get_watched,
     remove_from_watched,
-    get_watched_movies_info,
-    get_watched_tv_info,
+    _get_watched_items,
     update_watched_rating,
 )
 from app.dependencies.auth import get_current_user
@@ -70,19 +69,23 @@ def remove_item(
 def get_user_watched(
     db: Session = Depends(get_db),
     uid: str = Depends(get_current_user),
+    page: int = Query(1, ge=1),
+    per_page: int = Query(20, ge=1, le=100),
+    sort: str = Query("watched_desc"),
+    search: str = Query(""),
 ):
-    return get_watched(db, uid)
+    return get_watched(db, uid, page=page, per_page=per_page, sort=sort, search=search)
 
 
 @router.get("/tv")
 def watched_tv_info(
     db: Session = Depends(get_db), uid: str = Depends(get_current_user)
 ):
-    return get_watched_tv_info(db, uid)
+    return _get_watched_items(db, uid, "tv")
 
 
 @router.get("/movie")
 def watched_movie_info(
     db: Session = Depends(get_db), uid: str = Depends(get_current_user)
 ):
-    return get_watched_movies_info(db, uid)
+    return _get_watched_items(db, uid, "movie")

@@ -87,13 +87,13 @@ async def _daily_digest_loop():
             print(f"[daily digest] Error: {e}")
         finally:
             db.close()
-        await asyncio.sleep(86400)  # sleep 24h before recalculating
 
 
 async def _episode_update_loop():
     """Refresh show's episodes and TMDB vote_average for all shows and movies once a day at 3am."""
+    eastern = ZoneInfo("America/New_York")
     while True:
-        now = datetime.now()
+        now = datetime.now(eastern)
         next_run = now.replace(hour=3, minute=0, second=0, microsecond=0)
         if now >= next_run:
             next_run += timedelta(days=1)
@@ -108,7 +108,6 @@ async def _episode_update_loop():
             print(f"[vote update] Error: {e}")
         finally:
             db.close()
-        await asyncio.sleep(86400)  # sleep 24h before recalculating
 
 
 @asynccontextmanager

@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import type { User } from "firebase/auth";
-import { API_URL } from "../constants";
+import { apiFetch } from "../utils/apiFetch";
 
 interface Review {
   id: number;
@@ -73,9 +73,7 @@ export default function ReviewsSection({
 
   useEffect(() => {
     setLoading(true);
-    fetch(
-      `${API_URL}/reviews?content_type=${contentType}&content_id=${contentId}`,
-    )
+    apiFetch(`/reviews?content_type=${contentType}&content_id=${contentId}`)
       .then((r) => r.json())
       .then((data) => {
         setReviews(Array.isArray(data) ? data : []);
@@ -94,13 +92,9 @@ export default function ReviewsSection({
     if (!user || !draft.trim()) return;
     setSaving(true);
     try {
-      const token = await user.getIdToken();
-      const res = await fetch(`${API_URL}/reviews`, {
+      const res = await apiFetch("/reviews", {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           content_type: contentType,
           content_id: contentId,
@@ -127,13 +121,9 @@ export default function ReviewsSection({
     if (!user || !myReview) return;
     setDeleting(true);
     try {
-      const token = await user.getIdToken();
-      const res = await fetch(`${API_URL}/reviews`, {
+      const res = await apiFetch("/reviews", {
         method: "DELETE",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           content_type: contentType,
           content_id: contentId,

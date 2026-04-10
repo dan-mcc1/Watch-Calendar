@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Body, HTTPException, Request
+from fastapi import APIRouter, Depends, Body, HTTPException, Request, Query
 from sqlalchemy import tuple_
 from sqlalchemy.orm import Session
 from app.db.session import get_db
@@ -6,10 +6,8 @@ from app.services.watchlist_service import (
     add_to_watchlist,
     get_watchlist,
     remove_from_watchlist,
-    get_tv_watchlist_info,
-    get_movie_watchlist_info,
-    get_movie_watchlist_status,
-    get_show_watchlist_status,
+    _get_watchlist_items,
+    get_watchlist_status,
     get_tv_calendar,
 )
 from app.models.watchlist import Watchlist
@@ -53,8 +51,12 @@ def remove_item(
 def get_user_watchlist(
     db: Session = Depends(get_db),
     uid: str = Depends(get_current_user),
+    page: int = Query(1, ge=1),
+    per_page: int = Query(20, ge=1, le=100),
+    sort: str = Query("added_desc"),
+    search: str = Query(""),
 ):
-    return get_watchlist(db, uid)
+    return get_watchlist(db, uid, page=page, per_page=per_page, sort=sort, search=search)
 
 
 @router.get("/tv/calendar")
@@ -69,14 +71,14 @@ def watchlist_tv_calendar(
 def watchlist_tv_info(
     db: Session = Depends(get_db), uid: str = Depends(get_current_user)
 ):
-    return get_tv_watchlist_info(db, uid)
+    return _get_watchlist_items(db, uid, "tv")
 
 
 @router.get("/movie")
 def watchlist_movie_info(
     db: Session = Depends(get_db), uid: str = Depends(get_current_user)
 ):
-    return get_movie_watchlist_info(db, uid)
+    return _get_watchlist_items(db, uid, "movie")
 
 
 @router.post("/status/bulk")
@@ -144,11 +146,11 @@ def bulk_status(
 def watchlist_movie_status(
     id: int, db: Session = Depends(get_db), uid: str = Depends(get_current_user)
 ):
-    return get_movie_watchlist_status(id, db, uid)
+    return get_watchlist_status(id, db, uid, "movie")
 
 
 @router.get("/tv/{id}/status")
-def watchlist_movie_status(
+def watchlist_tv_status(
     id: int, db: Session = Depends(get_db), uid: str = Depends(get_current_user)
 ):
-    return get_show_watchlist_status(id, db, uid)
+    return get_watchlist_status(id, db, uid, "tv")

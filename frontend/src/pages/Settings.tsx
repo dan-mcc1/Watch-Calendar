@@ -1,13 +1,10 @@
 import { useState, useEffect, useCallback } from "react";
-import {
-  getAuth,
-  onAuthStateChanged,
-  deleteUser,
-  signOut,
-} from "firebase/auth";
-import { firebaseApp } from "../firebase";
+import { deleteUser, signOut } from "firebase/auth";
+import { auth } from "../firebase";
+import { useAuthUser } from "../hooks/useAuthUser";
+import { apiFetch } from "../utils/apiFetch";
 import { useNavigate } from "react-router-dom";
-import { API_URL, AVATAR_PRESETS, getAvatarColor } from "../constants";
+import { AVATAR_PRESETS, getAvatarColor } from "../constants";
 import { usePageTitle } from "../hooks/usePageTitle";
 
 const USERNAME_RE = /^[a-zA-Z0-9_]{3,30}$/;
@@ -73,10 +70,8 @@ function AvatarPreview({
 
 export default function Settings() {
   usePageTitle("Settings");
-  const auth = getAuth(firebaseApp);
-  const [user, setUser] = useState(auth.currentUser);
+  const user = useAuthUser();
   const [dbUser, setDbUser] = useState<DBUser | null>(null);
-  const [token, setToken] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
 
@@ -110,15 +105,11 @@ export default function Settings() {
   const [avatarSaving, setAvatarSaving] = useState(false);
   const [avatarSaved, setAvatarSaved] = useState(false);
 
-  const fetchUserData = useCallback(async (tok: string) => {
+  const fetchUserData = useCallback(async () => {
     try {
       const [meRes, notifRes] = await Promise.all([
-        fetch(`${API_URL}/user/me`, {
-          headers: { Authorization: `Bearer ${tok}` },
-        }),
-        fetch(`${API_URL}/notifications/preferences`, {
-          headers: { Authorization: `Bearer ${tok}` },
-        }),
+        apiFetch("/user/me"),
+        apiFetch("/notifications/preferences"),
       ]);
       if (meRes.ok) {
         const data: DBUser = await meRes.json();
@@ -138,28 +129,18 @@ export default function Settings() {
   }, []);
 
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async (u) => {
-      setUser(u);
-      if (u) {
-        const tok = await u.getIdToken();
-        setToken(tok);
-        fetchUserData(tok);
-      }
-    });
-    return () => unsub();
-  }, [fetchUserData]);
+    if (!user) return;
+    fetchUserData();
+  }, [user, fetchUserData]);
 
   // ── Preferences (email toggle, frequency, visibility) ───────────────────
   const patchPreferences = async (patch: Record<string, unknown>) => {
-    if (!token || prefSaving) return;
+    if (prefSaving) return;
     setPrefSaving(true);
     try {
-      const res = await fetch(`${API_URL}/notifications/preferences`, {
+      const res = await apiFetch("/notifications/preferences", {
         method: "PATCH",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(patch),
       });
       if (res.ok) {
@@ -188,8 +169,8 @@ export default function Settings() {
     }
     setUsernameChecking(true);
     try {
-      const res = await fetch(
-        `${API_URL}/user/check-username?username=${encodeURIComponent(value)}`,
+      const res = await apiFetch(
+        `/user/check-username?username=${encodeURIComponent(value)}`,
       );
       const data = await res.json();
       setUsernameAvailable(data.available);
@@ -220,12 +201,9 @@ export default function Settings() {
     setUsernameSaving(true);
     setUsernameError(null);
     try {
-      const res = await fetch(`${API_URL}/user/update-username`, {
+      const res = await apiFetch("/user/update-username", {
         method: "PUT",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ new_username: newUsername }),
       });
       if (res.ok) {
@@ -244,16 +222,13 @@ export default function Settings() {
 
   // ── Bio ──────────────────────────────────────────────────────────────────
   async function saveBio() {
-    if (!token || bioSaving) return;
+    if (bioSaving) return;
     setBioSaving(true);
     setBioSaved(false);
     try {
-      const res = await fetch(`${API_URL}/user/update-bio`, {
+      const res = await apiFetch("/user/update-bio", {
         method: "PUT",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ bio: bio.trim() || null }),
       });
       if (res.ok) {
@@ -272,16 +247,13 @@ export default function Settings() {
 
   // ── Avatar ───────────────────────────────────────────────────────────────
   async function saveAvatar() {
-    if (!token || selectedAvatar === dbUser?.avatar_key) return;
+    if (selectedAvatar === dbUser?.avatar_key) return;
     setAvatarSaving(true);
     setAvatarSaved(false);
     try {
-      const res = await fetch(`${API_URL}/user/update-avatar`, {
+      const res = await apiFetch("/user/update-avatar", {
         method: "PUT",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ avatar_key: selectedAvatar }),
       });
       if (res.ok) {
@@ -309,11 +281,7 @@ export default function Settings() {
       return;
     setError(null);
     try {
-      const tok = await user.getIdToken();
-      const res = await fetch(`${API_URL}/user/account`, {
-        method: "DELETE",
-        headers: { Authorization: `Bearer ${tok}` },
-      });
+      const res = await apiFetch("/user/account", { method: "DELETE" });
       if (!res.ok) throw new Error("Failed to delete account data");
       await deleteUser(user);
       navigate("/signIn");

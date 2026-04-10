@@ -8,9 +8,9 @@ import type {
   Movie,
   Person,
 } from "../types/calendar";
-import { API_URL } from "../constants";
-import { getAuth, onAuthStateChanged, User } from "firebase/auth";
-import { firebaseApp } from "../firebase";
+import { auth } from "../firebase";
+import { useAuthUser } from "../hooks/useAuthUser";
+import { apiFetch } from "../utils/apiFetch";
 import CurrentlyWatchingStrip from "../components/CurrentlyWatchingStrip";
 import CalendarSyncModal from "../components/CalendarSyncModal";
 import { usePageTitle } from "../hooks/usePageTitle";
@@ -19,8 +19,10 @@ import { getDashboardCache, setDashboardCache } from "../utils/dashboardCache";
 
 export default function Dashboard() {
   usePageTitle();
-  const [user, setUser] = useState<User | null>(null);
-  const [authLoading, setAuthLoading] = useState(true);
+  const user = useAuthUser();
+  const [authLoading, setAuthLoading] = useState(
+    () => auth.currentUser === null,
+  );
   const [loading, setLoading] = useState(false);
   const [CalendarData, setCalendarData] = useState<CalendarData>({
     shows: [],
@@ -54,14 +56,12 @@ export default function Dashboard() {
   }>({ movies: [], shows: [] });
   const [guestLoading, setGuestLoading] = useState(false);
 
-  const auth = getAuth(firebaseApp);
+  useEffect(() => {
+    setAuthLoading(false);
+  }, [user]);
 
   async function fetchTVCalendar(): Promise<ShowWithCalendar[]> {
-    const token = await auth.currentUser?.getIdToken();
-    if (!token) return [];
-    const res = await fetch(`${API_URL}/watchlist/tv/calendar`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
+    const res = await apiFetch("/watchlist/tv/calendar");
     if (!res.ok) return [];
     return res.json();
   }
@@ -70,41 +70,25 @@ export default function Dashboard() {
     shows: Show[];
     movies: Movie[];
   }> {
-    const token = await auth.currentUser?.getIdToken();
-    if (!token) return { shows: [], movies: [] };
-    const res = await fetch(`${API_URL}/currently-watching/`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
+    const res = await apiFetch("/currently-watching/");
     if (!res.ok) return { shows: [], movies: [] };
     return res.json();
   }
 
   async function fetchMovieCalendar(): Promise<Movie[]> {
-    const token = await auth.currentUser?.getIdToken();
-    if (!token) return [];
-    const res = await fetch(`${API_URL}/watchlist/movie`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
+    const res = await apiFetch("/watchlist/movie");
     if (!res.ok) throw new Error("Failed to fetch movie watchlist");
     return res.json();
   }
 
   async function fetchWatchedMovies(): Promise<Movie[]> {
-    const token = await auth.currentUser?.getIdToken();
-    if (!token) return [];
-    const res = await fetch(`${API_URL}/watched/movie`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
+    const res = await apiFetch("/watched/movie");
     if (!res.ok) return [];
     return res.json();
   }
 
   async function fetchWatchedEpisodeKeys(): Promise<Set<string>> {
-    const token = await auth.currentUser?.getIdToken();
-    if (!token) return new Set();
-    const res = await fetch(`${API_URL}/watched-episode/`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
+    const res = await apiFetch("/watched-episode/");
     if (!res.ok) return new Set();
     const data: {
       show_id: number;
@@ -115,14 +99,6 @@ export default function Dashboard() {
       data.map((e) => `${e.show_id}_${e.season_number}_${e.episode_number}`),
     );
   }
-
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      setUser(currentUser);
-      setAuthLoading(false);
-    });
-    return () => unsubscribe();
-  }, []);
 
   useEffect(() => {
     if (!user) {
@@ -197,18 +173,14 @@ export default function Dashboard() {
 
   useEffect(() => {
     if (!user) return;
-    user.getIdToken().then((token) =>
-      fetch(`${API_URL}/recommendations/for-you`, {
-        headers: { Authorization: `Bearer ${token}` },
+    apiFetch("/recommendations/for-you")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (!data) return;
+        setForYouMovies((data.movies ?? []).slice(0, 4));
+        setForYouShows((data.shows ?? []).slice(0, 4));
       })
-        .then((r) => (r.ok ? r.json() : null))
-        .then((data) => {
-          if (!data) return;
-          setForYouMovies((data.movies ?? []).slice(0, 4));
-          setForYouShows((data.shows ?? []).slice(0, 4));
-        })
-        .catch(() => {}),
-    );
+      .catch(() => {});
   }, [user]);
 
   // Fetch public content for guest view
@@ -225,9 +197,9 @@ export default function Dashboard() {
         const max_date = nextMonth.toISOString().split("T")[0];
 
         const [trendingRes, upcomingRes] = await Promise.all([
-          fetch(`${API_URL}/search/multi/trending`),
-          fetch(
-            `${API_URL}/search/movie/upcoming?${new URLSearchParams({ min_date, max_date })}`,
+          apiFetch("/search/multi/trending"),
+          apiFetch(
+            `/search/movie/upcoming?${new URLSearchParams({ min_date, max_date })}`,
           ),
         ]);
 
@@ -388,7 +360,6 @@ export default function Dashboard() {
       <CurrentlyWatchingStrip
         shows={currentlyWatchingShows}
         movies={currentlyWatchingMovies}
-        user={user}
         onEpisodeWatched={handleEpisodeWatched}
       />
       <Calendar

@@ -55,20 +55,6 @@ export default function CalendarComponent({
   isLoading = false,
   onSyncCalendar,
 }: CalendarProps) {
-  const TZ_ABBR: Record<string, string> = {
-    "America/New_York": "ET",
-    "America/Chicago": "CT",
-    "America/Denver": "MT",
-    "America/Los_Angeles": "PT",
-    "America/Phoenix": "MT",
-    "Europe/London": "GMT",
-    "Europe/Paris": "CET",
-    "Europe/Berlin": "CET",
-    "Australia/Sydney": "AEST",
-    "Australia/Melbourne": "AEST",
-    "Asia/Tokyo": "JST",
-  };
-
   // Converts 24-hour time in a given source timezone to user's local time
   function formatAirTimeToLocal(
     time24: string | null | undefined,
@@ -125,15 +111,6 @@ export default function CalendarComponent({
   ];
 
   const episodeListRef = useRef<HTMLDivElement>(null);
-  const [token, setToken] = useState<string | null>(null);
-  useEffect(() => {
-    if (!user) return;
-    user
-      .getIdToken()
-      .then(setToken)
-      .catch(() => {});
-  }, [user]);
-
   const [filterType, setFilterType] = useState<"all" | "tv" | "movie">("all");
   const [watchFilter, setWatchFilter] = useState<
     "all" | "watched" | "unwatched"
@@ -327,9 +304,9 @@ export default function CalendarComponent({
       const start = days[0].date;
       const end = days[6].date;
       if (start.getMonth() === end.getMonth()) {
-        return `${monthNames[start.getMonth()]} ${start.getDate()} – ${end.getDate()}, ${start.getFullYear()}`;
+        return `${monthNames[start.getMonth()]} ${start.getDate()} - ${end.getDate()}, ${start.getFullYear()}`;
       }
-      return `${monthNames[start.getMonth()].slice(0, 3)} ${start.getDate()} – ${monthNames[end.getMonth()].slice(0, 3)} ${end.getDate()}, ${end.getFullYear()}`;
+      return `${monthNames[start.getMonth()].slice(0, 3)} ${start.getDate()} - ${monthNames[end.getMonth()].slice(0, 3)} ${end.getDate()}, ${end.getFullYear()}`;
     } else {
       return selectedDate.date.toLocaleDateString(undefined, {
         weekday: "short",
@@ -490,17 +467,25 @@ export default function CalendarComponent({
                   if (!el) return;
                   const navHeight = 64; // sticky navbar h-16
                   const top =
-                    el.getBoundingClientRect().top +
-                    window.scrollY -
-                    navHeight;
+                    el.getBoundingClientRect().top + window.scrollY - navHeight;
                   window.scrollTo({ top, behavior: "smooth" });
                 }, 50);
               }}
               className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold bg-primary-600 text-white hover:bg-primary-500 active:bg-primary-700 transition-colors shadow-sm"
             >
               {todayItemCount} airing today
-              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+              <svg
+                className="w-3 h-3"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={2.5}
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M19 9l-7 7-7-7"
+                />
               </svg>
             </button>
           )}
@@ -877,7 +862,10 @@ export default function CalendarComponent({
 
       {/* ── SELECTED DAY DETAIL (month & week views) ── */}
       {viewMode !== "day" && (
-        <div ref={episodeListRef} className="border-t border-neutral-700 bg-neutral-900/50 px-4 sm:px-6 py-4 sm:py-6">
+        <div
+          ref={episodeListRef}
+          className="border-t border-neutral-700 bg-neutral-900/50 px-4 sm:px-6 py-4 sm:py-6"
+        >
           <div className="flex items-center gap-3 mb-4">
             <h2 className="text-lg font-semibold text-neutral-100">
               {selectedDate.date.toLocaleDateString(undefined, {
@@ -899,7 +887,7 @@ export default function CalendarComponent({
               <DayScheduleView
                 items={getFilteredItems(selectedDate.items)}
                 watchedEpisodeKeys={watchedEpisodeKeys}
-                token={token}
+
                 onMarkWatched={onMarkEpisodeWatched}
               />
             ) : (
@@ -935,7 +923,7 @@ export default function CalendarComponent({
               <DayScheduleView
                 items={getFilteredItems(selectedDate.items)}
                 watchedEpisodeKeys={watchedEpisodeKeys}
-                token={token}
+
                 onMarkWatched={onMarkEpisodeWatched}
               />
             ) : (

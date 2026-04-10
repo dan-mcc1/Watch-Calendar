@@ -1,19 +1,23 @@
 import { useEffect, useState } from "react";
-import { BASE_IMAGE_URL, API_URL } from "../constants";
+import { BASE_IMAGE_URL } from "../constants";
 import type { Movie } from "../types/calendar";
 import { formatLocalDate } from "../utils/date";
 import { useParams } from "react-router-dom";
 import WhereToWatch from "../components/WhereToWatch";
 import CastBar from "../components/CastBar";
 import { Link } from "react-router-dom";
-import { getAuth } from "firebase/auth";
-import { firebaseApp } from "../firebase";
 import WatchButton, { WatchStatus } from "../components/WatchButton";
 import { getCachedStatuses, mergeCachedStatuses } from "../utils/statusCache";
 import FavoriteButton from "../components/FavoriteButton";
 import RecommendButton from "../components/RecommendButton";
 import ReviewsSection from "../components/ReviewsSection";
-import { onAuthStateChanged } from "firebase/auth";
+import { useAuthUser } from "../hooks/useAuthUser";
+import { apiFetch } from "../utils/apiFetch";
+import {
+  RatingBadge,
+  StatBox,
+  ExternalLink,
+} from "../components/InfoPageWidgets";
 import { usePageTitle } from "../hooks/usePageTitle";
 
 type FullMovieData = Movie & {
@@ -70,61 +74,6 @@ interface AggregateRating {
   count: number;
 }
 
-function RatingBadge({
-  label,
-  value,
-  color,
-}: {
-  label: string;
-  value: string;
-  color: string;
-}) {
-  return (
-    <div
-      className={`flex flex-col items-center bg-neutral-800 border rounded-xl px-4 py-3 min-w-[80px] ${color}`}
-    >
-      <span className="text-neutral-100 font-bold text-lg leading-tight">
-        {value}
-      </span>
-      <span className="text-neutral-500 text-xs mt-0.5 whitespace-nowrap">
-        {label}
-      </span>
-    </div>
-  );
-}
-
-function StatBox({
-  label,
-  value,
-}: {
-  label: string;
-  value: string | number | null | undefined;
-}) {
-  if (!value && value !== 0) return null;
-  return (
-    <div className="flex flex-col items-center bg-neutral-800 border border-neutral-700 rounded-xl px-4 py-3 min-w-[80px]">
-      <span className="text-neutral-100 font-bold text-lg leading-tight">
-        {value}
-      </span>
-      <span className="text-neutral-500 text-xs mt-0.5 whitespace-nowrap">
-        {label}
-      </span>
-    </div>
-  );
-}
-
-function ExternalLink({ href, label }: { href: string; label: string }) {
-  return (
-    <a
-      href={href}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="inline-flex items-center gap-1.5 text-sm text-neutral-400 hover:text-primary-400 bg-neutral-800 border border-neutral-700 hover:border-primary-600/50 px-3 py-1.5 rounded-lg transition-all duration-150"
-    >
-      {label}
-    </a>
-  );
-}
 
 function formatRuntime(minutes: number) {
   const h = Math.floor(minutes / 60);
@@ -140,8 +89,7 @@ export default function MovieInfo() {
   const [error, setError] = useState<string | null>(null);
   const [movie, setMovie] = useState<FullMovieData>();
   usePageTitle(movie?.title);
-  const auth = getAuth(firebaseApp);
-  const [user, setUser] = useState(auth.currentUser);
+  const user = useAuthUser();
   const [initialStatus, setInitialStatus] = useState<WatchStatus | undefined>(
     undefined,
   );
@@ -154,12 +102,13 @@ export default function MovieInfo() {
   );
   const [aggRating, setAggRating] = useState<AggregateRating | null>(null);
 
+  // Reset status when navigating to a different movie
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (u) => {
-      setUser(u);
-    });
-    return unsubscribe;
-  }, [auth]);
+    setMovie(undefined);
+    setInitialStatus(undefined);
+    setInitialRating(undefined);
+    setStatusReady(false);
+  }, [id]);
 
   useEffect(() => {
     if (!user || !movie) return;
@@ -171,33 +120,28 @@ export default function MovieInfo() {
       setStatusReady(true);
       return;
     }
-    user.getIdToken().then((token) =>
-      fetch(`${API_URL}/watchlist/status/bulk`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
+    apiFetch("/watchlist/status/bulk", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(missing),
+    })
+      .then((r) => (r.ok ? r.json() : {}))
+      .then(
+        (data: Record<string, { status: string; rating: number | null }>) => {
+          mergeCachedStatuses(user.uid, data);
+          setInitialStatus(data[`movie:${movie.id}`]?.status as WatchStatus);
+          setInitialRating(data[`movie:${movie.id}`]?.rating ?? null);
         },
-        body: JSON.stringify(missing),
-      })
-        .then((r) => (r.ok ? r.json() : {}))
-        .then(
-          (data: Record<string, { status: string; rating: number | null }>) => {
-            mergeCachedStatuses(user.uid, data);
-            setInitialStatus(data[`movie:${movie.id}`]?.status as WatchStatus);
-            setInitialRating(data[`movie:${movie.id}`]?.rating ?? null);
-          },
-        )
-        .catch(() => {})
-        .finally(() => setStatusReady(true)),
-    );
+      )
+      .catch(() => {})
+      .finally(() => setStatusReady(true));
   }, [user, movie]);
 
   useEffect(() => {
     async function getData() {
       try {
         setLoading(true);
-        const res = await fetch(`${API_URL}/movies/${id}/info`);
+        const res = await apiFetch(`/movies/${id}/info`);
         if (!res.ok) throw new Error("Failed to fetch movie");
         const rawData = await res.json();
         let data: FullMovieData;
@@ -211,17 +155,15 @@ export default function MovieInfo() {
         }
         setMovie(data);
         // Fetch aggregate ratings
-        fetch(
-          `${API_URL}/reviews/aggregate?content_type=movie&content_id=${id}`,
-        )
+        apiFetch(`/reviews/aggregate?content_type=movie&content_id=${id}`)
           .then((r) => r.json())
           .then(setAggRating)
           .catch(() => {});
         // Fetch RT/Metacritic via OMDB if we have an imdb_id
         const imdbId = data.external_ids?.imdb_id;
         if (imdbId) {
-          fetch(
-            `${API_URL}/reviews/external-scores?imdb_id=${encodeURIComponent(imdbId)}`,
+          apiFetch(
+            `/reviews/external-scores?imdb_id=${encodeURIComponent(imdbId)}`,
           )
             .then((r) => r.json())
             .then(

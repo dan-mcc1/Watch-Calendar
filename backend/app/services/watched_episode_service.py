@@ -3,11 +3,16 @@ from sqlalchemy.orm import Session
 from datetime import datetime
 from app.models.episode_watched import EpisodeWatched
 from app.models.episode import Episode
+from app.models.watchlist import Watchlist
+from app.models.currently_watching import CurrentlyWatching
 from app.services.episode_service import (
     get_or_create_episode,
     sync_season_episodes,
     ensure_show_in_db,
 )
+from app.services.watched_service import add_to_watched
+from app.services.watchlist_service import remove_from_watchlist
+from app.services.currently_watching_service import remove_from_currently_watching
 
 
 def add_episode_watched(
@@ -309,9 +314,6 @@ def _maybe_auto_complete_show(db: Session, user_id: str, show_id: int) -> bool:
     if all episodes have been seen. Returns True if auto-completed.
     Only triggers if the show is currently in Watchlist or Currently Watching.
     """
-    from app.models.watchlist import Watchlist
-    from app.models.currently_watching import CurrentlyWatching
-
     in_watchlist = (
         db.query(Watchlist)
         .filter_by(user_id=user_id, content_type="tv", content_id=show_id)
@@ -343,10 +345,6 @@ def _maybe_auto_complete_show(db: Session, user_id: str, show_id: int) -> bool:
     result = get_next_unwatched_episode(db, user_id, show_id)
     if not result.get("finished"):
         return False
-
-    from app.services.watched_service import add_to_watched
-    from app.services.watchlist_service import remove_from_watchlist
-    from app.services.currently_watching_service import remove_from_currently_watching
 
     # Add to Watched first so the subsequent removes see it still tracked
     # and leave tracking_count unchanged

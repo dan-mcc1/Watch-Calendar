@@ -1,13 +1,12 @@
 // src/pages/Watchlist.tsx
-import { useEffect, useState } from "react";
-import { getAuth, onAuthStateChanged, User } from "firebase/auth";
-import { firebaseApp } from "../firebase";
-import { BASE_IMAGE_URL, API_URL } from "../constants";
+import { useState } from "react";
+import { BASE_IMAGE_URL } from "../constants";
 import { useNavigate } from "react-router-dom";
 import { CalendarData } from "../types/calendar";
 import { FaPencilAlt } from "react-icons/fa";
 import { Link } from "react-router-dom";
 import WatchButton from "./WatchButton";
+import { apiFetch } from "../utils/apiFetch";
 
 interface WatchlistModalProps {
   isOpen: boolean;
@@ -26,7 +25,6 @@ export default function WatchlistModal({
 
   const [filter, setFilter] = useState<"all" | "tv" | "movies">("all");
   const navigate = useNavigate();
-  const auth = getAuth(firebaseApp);
 
   const showsToDisplay =
     filter === "all" || filter === "tv" ? calendarData.shows : [];
@@ -36,17 +34,10 @@ export default function WatchlistModal({
   // Remove a show from watchlist
   const handleRemove = async (contentType: "tv" | "movie", id: number) => {
     try {
-      // Get the current user's token for authentication
-      const token = await auth.currentUser?.getIdToken();
-      if (!token) return;
-
       // Call backend API to remove show
-      const res = await fetch(`${API_URL}/watchlist/remove`, {
+      const res = await apiFetch("/watchlist/remove", {
         method: "DELETE",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           content_type: contentType,
           content_id: id,

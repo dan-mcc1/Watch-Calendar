@@ -1,6 +1,6 @@
 import { useState, useRef } from "react";
-import { API_URL } from "../constants";
 import { Link } from "react-router-dom";
+import { apiFetch } from "../utils/apiFetch";
 
 interface SearchResult {
   id: string;
@@ -9,13 +9,11 @@ interface SearchResult {
 }
 
 interface Props {
-  token: string;
   onRequestSent: () => void;
   friendIds?: Set<string>;
 }
 
 export default function FriendSearch({
-  token,
   onRequestSent,
   friendIds,
 }: Props) {
@@ -41,11 +39,8 @@ export default function FriendSearch({
 
     debounceRef.current = setTimeout(async () => {
       try {
-        const res = await fetch(
-          `${API_URL}/friends/search?q=${encodeURIComponent(value.trim())}`,
-          {
-            headers: { Authorization: `Bearer ${token}` },
-          },
+        const res = await apiFetch(
+          `/friends/search?q=${encodeURIComponent(value.trim())}`,
         );
         if (res.ok) {
           setResults(await res.json());
@@ -60,12 +55,9 @@ export default function FriendSearch({
     setSending(user.username);
     setError(null);
     try {
-      const res = await fetch(`${API_URL}/friends/request`, {
+      const res = await apiFetch("/friends/request", {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ addressee_username: user.username }),
       });
       if (res.ok) {

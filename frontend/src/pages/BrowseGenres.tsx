@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import type { Show, Movie } from "../types/calendar";
-import { API_URL } from "../constants";
+import { apiFetch } from "../utils/apiFetch";
 import MediaList from "../components/MediaList";
 import { usePageTitle } from "../hooks/usePageTitle";
 
@@ -48,7 +48,7 @@ export default function BrowseGenres() {
       setGenres(genreCache);
       return;
     }
-    fetch(`${API_URL}/search/genres`)
+    apiFetch(`/search/genres`)
       .then((r) => r.json())
       .then((data: GenreList) => {
         genreCache = data;
@@ -78,7 +78,7 @@ export default function BrowseGenres() {
           type: activeTab,
           page: String(page),
         });
-        const res = await fetch(`${API_URL}/search?${params}`);
+        const res = await apiFetch(`/search?${params}`);
         if (!res.ok) throw new Error("Failed to fetch genre results");
         const data = await res.json();
         setResults({ movies: data.movies ?? [], shows: data.shows ?? [] });

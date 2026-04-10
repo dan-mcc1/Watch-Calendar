@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { API_URL } from "../constants";
+import { apiFetch } from "../utils/apiFetch";
 
 interface Friend {
   id: string;
@@ -14,14 +14,12 @@ interface FriendEntry {
 }
 
 interface Props {
-  token: string;
   friends: FriendEntry[];
   onFriendRemoved: (friendId: string) => void;
   onFindFriends?: () => void;
 }
 
 export default function FriendsList({
-  token,
   friends,
   onFriendRemoved,
   onFindFriends,
@@ -32,10 +30,7 @@ export default function FriendsList({
   async function removeFriend(friendId: string) {
     setRemoving(friendId);
     try {
-      await fetch(`${API_URL}/friends/remove/${friendId}`, {
-        method: "DELETE",
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      await apiFetch(`/friends/remove/${friendId}`, { method: "DELETE" });
       onFriendRemoved(friendId);
     } finally {
       setRemoving(null);

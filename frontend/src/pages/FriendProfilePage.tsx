@@ -1,8 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams, Link, Navigate } from "react-router-dom";
-import { getAuth, onAuthStateChanged } from "firebase/auth";
-import { firebaseApp } from "../firebase";
-import { API_URL } from "../constants";
+import { apiFetch } from "../utils/apiFetch";
+import { useAuthUser } from "../hooks/useAuthUser";
 import ExpandableMediaList from "../components/ExpandableMediaList";
 import { usePageTitle } from "../hooks/usePageTitle";
 
@@ -37,27 +36,23 @@ interface PublicProfile {
 
 export default function FriendProfilePage() {
   const { username } = useParams<{ username: string }>();
-  const auth = getAuth(firebaseApp);
+  const user = useAuthUser();
 
   const [profile, setProfile] = useState<PublicProfile | null>(null);
   usePageTitle(profile ? `@${profile.username}` : undefined);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [token, setToken] = useState<string | null>(null);
   const [requesting, setRequesting] = useState(false);
   const [isSelf, setIsSelf] = useState(false);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      if (!firebaseUser || !username) return;
-      setLoading(true);
-      setError(null);
+    if (!user || !username) return;
+    setLoading(true);
+    setError(null);
+    (async () => {
       try {
-        const tok = await firebaseUser.getIdToken();
-        setToken(tok);
-        const res = await fetch(
-          `${API_URL}/user/profile/${encodeURIComponent(username)}`,
-          { headers: { Authorization: `Bearer ${tok}` } },
+        const res = await apiFetch(
+          `/user/profile/${encodeURIComponent(username)}`,
         );
         if (res.status === 400) {
           setIsSelf(true);
@@ -73,54 +68,31 @@ export default function FriendProfilePage() {
       } finally {
         setLoading(false);
       }
-    });
-    return () => unsubscribe();
-  }, [username]);
+    })();
+  }, [user, username]);
 
   async function sendRequest() {
-    if (!token || !profile || requesting) return;
+    if (!profile || requesting) return;
     setRequesting(true);
     try {
-      const res = await fetch(`${API_URL}/friends/request`, {
+      const res = await apiFetch("/friends/request", {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ addressee_username: profile.username }),
       });
       if (res.ok) {
         const data = await res.json();
         if (data.status === "following") {
           setProfile((p) =>
-            p
-              ? {
-                  ...p,
-                  is_following: true,
-                  following_id: data.id,
-                  pending_request_id: null,
-                }
-              : p,
+            p ? { ...p, is_following: true, following_id: data.id, pending_request_id: null } : p,
           );
         } else if (data.status === "accepted") {
-          // Added back a follower — became mutual friends, reload to get lists
-          const profileRes = await fetch(
-            `${API_URL}/user/profile/${encodeURIComponent(profile.username)}`,
-            { headers: { Authorization: `Bearer ${token}` } },
-          );
+          const profileRes = await apiFetch(`/user/profile/${encodeURIComponent(profile.username)}`);
           if (profileRes.ok) {
             setProfile(await profileRes.json());
           } else {
             setProfile((p) =>
-              p
-                ? {
-                    ...p,
-                    is_friend: true,
-                    is_following: false,
-                    following_id: null,
-                    pending_request_id: null,
-                  }
-                : p,
+              p ? { ...p, is_friend: true, is_following: false, following_id: null, pending_request_id: null } : p,
             );
           }
         } else {
@@ -133,72 +105,41 @@ export default function FriendProfilePage() {
   }
 
   async function cancelRequest() {
-    if (!token || !profile?.pending_request_id || requesting) return;
+    if (!profile?.pending_request_id || requesting) return;
     setRequesting(true);
     try {
-      const res = await fetch(
-        `${API_URL}/friends/cancel/${profile.pending_request_id}`,
-        {
-          method: "DELETE",
-          headers: { Authorization: `Bearer ${token}` },
-        },
-      );
-      if (res.ok) {
-        setProfile((p) => (p ? { ...p, pending_request_id: null } : p));
-      }
+      const res = await apiFetch(`/friends/cancel/${profile.pending_request_id}`, { method: "DELETE" });
+      if (res.ok) setProfile((p) => (p ? { ...p, pending_request_id: null } : p));
     } finally {
       setRequesting(false);
     }
   }
 
   async function unfollow() {
-    if (!token || !profile?.following_id || requesting) return;
+    if (!profile?.following_id || requesting) return;
     setRequesting(true);
     try {
-      const res = await fetch(
-        `${API_URL}/friends/cancel/${profile.following_id}`,
-        {
-          method: "DELETE",
-          headers: { Authorization: `Bearer ${token}` },
-        },
-      );
-      if (res.ok) {
-        setProfile((p) =>
-          p ? { ...p, is_following: false, following_id: null } : p,
-        );
-      }
+      const res = await apiFetch(`/friends/cancel/${profile.following_id}`, { method: "DELETE" });
+      if (res.ok) setProfile((p) => p ? { ...p, is_following: false, following_id: null } : p);
     } finally {
       setRequesting(false);
     }
   }
 
   async function respondToRequest(accept: boolean) {
-    if (!token || !profile?.incoming_request_id || requesting) return;
+    if (!profile?.incoming_request_id || requesting) return;
     setRequesting(true);
     try {
-      const res = await fetch(`${API_URL}/friends/respond`, {
+      const res = await apiFetch("/friends/respond", {
         method: "PATCH",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          friendship_id: profile.incoming_request_id,
-          accept,
-        }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ friendship_id: profile.incoming_request_id, accept }),
       });
       if (res.ok) {
         if (accept) {
-          // Reload profile to get lists
-          const profileRes = await fetch(
-            `${API_URL}/user/profile/${encodeURIComponent(profile.username)}`,
-            { headers: { Authorization: `Bearer ${token}` } },
-          );
+          const profileRes = await apiFetch(`/user/profile/${encodeURIComponent(profile.username)}`);
           if (profileRes.ok) setProfile(await profileRes.json());
-          else
-            setProfile((p) =>
-              p ? { ...p, is_friend: true, incoming_request_id: null } : p,
-            );
+          else setProfile((p) => p ? { ...p, is_friend: true, incoming_request_id: null } : p);
         } else {
           setProfile((p) => (p ? { ...p, incoming_request_id: null } : p));
         }

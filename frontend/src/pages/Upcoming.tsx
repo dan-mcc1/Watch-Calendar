@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { API_URL } from "../constants";
 import MediaList from "../components/MediaList";
 import type { Movie, Show } from "../types/calendar";
 import { usePageTitle } from "../hooks/usePageTitle";
+import { apiFetch } from "../utils/apiFetch";
 
 type MediaType = "tv" | "movie";
 
@@ -45,8 +45,8 @@ export default function Upcoming() {
           max_date,
           page: String(page),
         });
-        const res = await fetch(
-          `${API_URL}/search/${endpoint}/upcoming?${params.toString()}`,
+        const res = await apiFetch(
+          `/search/${endpoint}/upcoming?${params.toString()}`,
         );
         if (!res.ok) throw new Error("Failed to fetch upcoming");
         const data = await res.json();

@@ -1,5 +1,5 @@
 # src/models/watchlist.py
-from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Index
+from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Index, UniqueConstraint
 from sqlalchemy.sql import func
 from app.db.base import Base
 
@@ -14,5 +14,6 @@ class Watchlist(Base):
     added_at = Column(DateTime(timezone=True), server_default=func.now())
 
     __table_args__ = (
+        UniqueConstraint("user_id", "content_type", "content_id", name="uq_watchlist_user_content"),
         Index("ix_watchlist_user_content", "user_id", "content_type", "content_id"),
     )

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
-import { getAuth } from "firebase/auth";
-import { firebaseApp } from "../firebase";
-import { API_URL, BASE_IMAGE_URL } from "../constants";
+import { BASE_IMAGE_URL } from "../constants";
+import { apiFetch } from "../utils/apiFetch";
+import { useAuthUser } from "../hooks/useAuthUser";
 import { Link, useNavigate } from "react-router-dom";
 import { usePageTitle } from "../hooks/usePageTitle";
 import WatchButton, { WatchStatus } from "../components/WatchButton";
@@ -315,7 +315,7 @@ type Tab = "mine" | "friends" | "recommendations";
 
 export default function ActivityFeedPage() {
   usePageTitle("Activity");
-  const auth = getAuth(firebaseApp);
+  const user = useAuthUser();
   const navigate = useNavigate();
   const [tab, setTab] = useState<Tab>("friends");
   const [myItems, setMyItems] = useState<ActivityItem[]>([]);
@@ -327,52 +327,39 @@ export default function ActivityFeedPage() {
   const [friendsLoading, setFriendsLoading] = useState(true);
   const [recsLoading, setRecsLoading] = useState(true);
   const [currentUserId, setCurrentUserId] = useState<string>("");
-  const [token, setToken] = useState<string>("");
   const [statusMap, setStatusMap] = useState<StatusMap>({});
 
   useEffect(() => {
-    const unsubscribe = auth.onAuthStateChanged(async (user) => {
-      if (!user) {
-        navigate("/signIn");
-        return;
-      }
-      setCurrentUserId(user.uid);
-      const tok = await user.getIdToken();
-      setToken(tok);
+    if (!user) {
+      navigate("/signIn");
+      return;
+    }
+    setCurrentUserId(user.uid);
 
-      fetch(`${API_URL}/friends/my-activity`, {
-        headers: { Authorization: `Bearer ${tok}` },
-      })
-        .then((r) => (r.ok ? r.json() : []))
-        .then(setMyItems)
-        .catch(() => {})
-        .finally(() => setMyLoading(false));
+    apiFetch("/friends/my-activity")
+      .then((r) => (r.ok ? r.json() : []))
+      .then(setMyItems)
+      .catch(() => {})
+      .finally(() => setMyLoading(false));
 
-      fetch(`${API_URL}/friends/activity`, {
-        headers: { Authorization: `Bearer ${tok}` },
-      })
-        .then((r) => (r.ok ? r.json() : []))
-        .then(setFriendItems)
-        .catch(() => {})
-        .finally(() => setFriendsLoading(false));
+    apiFetch("/friends/activity")
+      .then((r) => (r.ok ? r.json() : []))
+      .then(setFriendItems)
+      .catch(() => {})
+      .finally(() => setFriendsLoading(false));
 
-      fetch(`${API_URL}/recommendations/inbox`, {
-        headers: { Authorization: `Bearer ${tok}` },
-      })
-        .then((r) => (r.ok ? r.json() : []))
-        .then(setRecommendations)
-        .catch(() => {})
-        .finally(() => setRecsLoading(false));
-    });
-    return unsubscribe;
-  }, []);
+    apiFetch("/recommendations/inbox")
+      .then((r) => (r.ok ? r.json() : []))
+      .then(setRecommendations)
+      .catch(() => {})
+      .finally(() => setRecsLoading(false));
+  }, [user, navigate]);
 
   // Bulk-fetch watch statuses for all tabs
   useEffect(() => {
     if (!currentUserId || (!myItems.length && !friendItems.length && !recommendations.length)) {
       return;
     }
-    const user = auth.currentUser;
     if (!user) return;
     const seen = new Set<string>();
     const unique = [...myItems, ...friendItems, ...recommendations]
@@ -386,32 +373,24 @@ export default function ActivityFeedPage() {
       setStatusMap(cached as StatusMap);
       return;
     }
-    user.getIdToken().then((token) =>
-      fetch(`${API_URL}/watchlist/status/bulk`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(missing),
+    apiFetch("/watchlist/status/bulk", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(missing),
+    })
+      .then((r) => (r.ok ? r.json() : {}))
+      .then((data) => {
+        mergeCachedStatuses(user.uid, data);
+        setStatusMap({ ...cached, ...data } as StatusMap);
       })
-        .then((r) => (r.ok ? r.json() : {}))
-        .then((data) => {
-          mergeCachedStatuses(user.uid, data);
-          setStatusMap({ ...cached, ...data } as StatusMap);
-        })
-        .catch(() => setStatusMap(cached as StatusMap)),
-    );
+      .catch(() => setStatusMap(cached as StatusMap));
   }, [myItems, friendItems, recommendations, currentUserId]);
 
   // Refetch recommendations inbox when a new one arrives via SSE
   useEffect(() => {
     async function handler() {
-      if (!token) return;
       try {
-        const res = await fetch(`${API_URL}/recommendations/inbox`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
+        const res = await apiFetch("/recommendations/inbox");
         if (res.ok) setRecommendations(await res.json());
       } catch {
         // non-critical
@@ -419,17 +398,14 @@ export default function ActivityFeedPage() {
     }
     window.addEventListener("recommendation-received", handler);
     return () => window.removeEventListener("recommendation-received", handler);
-  }, [token]);
+  }, []);
 
   async function markRead(id: number) {
     setRecommendations((prev) =>
       prev.map((r) => (r.id === id ? { ...r, is_read: true } : r)),
     );
     try {
-      const res = await fetch(`${API_URL}/recommendations/${id}/read`, {
-        method: "PATCH",
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await apiFetch(`/recommendations/${id}/read`, { method: "PATCH" });
       if (res.ok) {
         window.dispatchEvent(new CustomEvent("rec-marked-read"));
       } else {
@@ -447,10 +423,7 @@ export default function ActivityFeedPage() {
   async function deleteRec(id: number) {
     setRecommendations((prev) => prev.filter((r) => r.id !== id));
     try {
-      await fetch(`${API_URL}/recommendations/${id}`, {
-        method: "DELETE",
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      await apiFetch(`/recommendations/${id}`, { method: "DELETE" });
     } catch {
       // non-critical, item already removed from UI
     }

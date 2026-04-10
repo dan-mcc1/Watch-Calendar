@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { API_URL } from "../constants";
+import { apiFetch } from "../utils/apiFetch";
 import {
   BarChart,
   Bar,
@@ -24,10 +24,6 @@ interface Stats {
     distribution: { rating: number; count: number }[];
   };
   top_genres: { name: string; count: number }[];
-}
-
-interface Props {
-  token: string;
 }
 
 const GENRE_COLORS = [
@@ -67,19 +63,17 @@ function StatCard({
   );
 }
 
-export default function StatsSection({ token }: Props) {
+export default function StatsSection() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch(`${API_URL}/user/stats`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
+    apiFetch("/user/stats")
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => setStats(data))
       .catch(() => setStats(null))
       .finally(() => setLoading(false));
-  }, [token]);
+  }, []);
 
   if (loading) {
     return (

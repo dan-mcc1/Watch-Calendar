@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useSearchParams, Link } from "react-router-dom";
-import { API_URL } from "../constants";
 import { usePageTitle } from "../hooks/usePageTitle";
+import { apiFetch } from "../utils/apiFetch";
 
 export default function Unsubscribe() {
   usePageTitle("Unsubscribe");
@@ -17,8 +17,8 @@ export default function Unsubscribe() {
       setStatus("error");
       return;
     }
-    fetch(
-      `${API_URL}/notifications/unsubscribe?uid=${encodeURIComponent(uid)}&token=${encodeURIComponent(token)}`,
+    apiFetch(
+      `/notifications/unsubscribe?uid=${encodeURIComponent(uid)}&token=${encodeURIComponent(token)}`,
     )
       .then((r) => (r.ok ? setStatus("success") : setStatus("error")))
       .catch(() => setStatus("error"));

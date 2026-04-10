@@ -1,29 +1,15 @@
 import { useState } from "react";
 import type { Episode, Movie, Show } from "../types/calendar";
-import { API_URL, BASE_IMAGE_URL } from "../constants";
+import { BASE_IMAGE_URL } from "../constants";
+import { apiFetch } from "../utils/apiFetch";
 import { Link } from "react-router-dom";
 import type { CalendarItem } from "./Calendar";
 
 interface Props {
   items: CalendarItem[];
   watchedEpisodeKeys?: Set<string>;
-  token?: string | null;
   onMarkWatched?: (showId: number, season: number, episode: number) => void;
 }
-
-const TZ_ABBR: Record<string, string> = {
-  "America/New_York": "ET",
-  "America/Chicago": "CT",
-  "America/Denver": "MT",
-  "America/Los_Angeles": "PT",
-  "America/Phoenix": "MT",
-  "Europe/London": "GMT",
-  "Europe/Paris": "CET",
-  "Europe/Berlin": "CET",
-  "Australia/Sydney": "AEST",
-  "Australia/Melbourne": "AEST",
-  "Asia/Tokyo": "JST",
-};
 
 // Converts 24-hour time in a given source timezone to user's local time
 function formatAirTimeToLocal(
@@ -130,11 +116,10 @@ function TypeBadge({ type }: { type: "tv" | "movie" }) {
 interface ItemCardProps {
   item: CalendarItem;
   isWatched?: boolean;
-  token?: string | null;
   onMarkWatched?: (showId: number, season: number, episode: number) => void;
 }
 
-function ItemCard({ item, isWatched, token, onMarkWatched }: ItemCardProps) {
+function ItemCard({ item, isWatched, onMarkWatched }: ItemCardProps) {
   const [marking, setMarking] = useState(false);
   const [localWatched, setLocalWatched] = useState(isWatched ?? false);
 
@@ -201,13 +186,13 @@ function ItemCard({ item, isWatched, token, onMarkWatched }: ItemCardProps) {
   async function handleMarkWatched(e: React.MouseEvent) {
     e.preventDefault();
     e.stopPropagation();
-    if (!isTv || !token || marking || localWatched) return;
+    if (!isTv || marking || localWatched) return;
     const tvItem = item as Episode & { type: "tv"; showData: Show };
     setMarking(true);
     try {
-      await fetch(
-        `${API_URL}/watched-episode/add?show_id=${tvItem.showData.id}&season_number=${tvItem.season_number}&episode_number=${tvItem.episode_number}`,
-        { method: "POST", headers: { Authorization: `Bearer ${token}` } },
+      await apiFetch(
+        `/watched-episode/add?show_id=${tvItem.showData.id}&season_number=${tvItem.season_number}&episode_number=${tvItem.episode_number}`,
+        { method: "POST" },
       );
       setLocalWatched(true);
       onMarkWatched?.(
@@ -283,7 +268,7 @@ function ItemCard({ item, isWatched, token, onMarkWatched }: ItemCardProps) {
         )}
 
         {/* Watched button — TV episodes only */}
-        {isTv && token && isReleased && (
+        {isTv && isReleased && (
           <div className="mt-2">
             {localWatched ? (
               <span className="inline-flex items-center gap-1 text-xs text-success-400 font-medium">
@@ -338,7 +323,6 @@ function ItemCard({ item, isWatched, token, onMarkWatched }: ItemCardProps) {
 export default function DayScheduleView({
   items,
   watchedEpisodeKeys,
-  token,
   onMarkWatched,
 }: Props) {
   if (items.length === 0) {
@@ -399,7 +383,6 @@ export default function DayScheduleView({
               key={itemKey(item)}
               item={item}
               isWatched={isWatched(item)}
-              token={token}
               onMarkWatched={onMarkWatched}
             />
           ))}
@@ -420,7 +403,6 @@ export default function DayScheduleView({
                 key={itemKey(item)}
                 item={item}
                 isWatched={isWatched(item)}
-                token={token}
                 onMarkWatched={onMarkWatched}
               />
             ))}

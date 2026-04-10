@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { API_URL } from "../constants";
 import { Link } from "react-router-dom";
+import { apiFetch } from "../utils/apiFetch";
 
 interface RequestUser {
   id: string;
@@ -21,7 +21,6 @@ interface OutgoingRequest {
 }
 
 interface Props {
-  token: string;
   incoming: IncomingRequest[];
   outgoing: OutgoingRequest[];
   onResponded: (
@@ -33,7 +32,6 @@ interface Props {
 }
 
 export default function FriendRequests({
-  token,
   incoming,
   outgoing,
   onResponded,
@@ -46,12 +44,9 @@ export default function FriendRequests({
     setResponding(friendshipId);
     const req = incoming.find((r) => r.friendship_id === friendshipId)!;
     try {
-      const res = await fetch(`${API_URL}/friends/respond`, {
+      const res = await apiFetch("/friends/respond", {
         method: "PATCH",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ friendship_id: friendshipId, accept }),
       });
       if (res.ok) {
@@ -66,10 +61,7 @@ export default function FriendRequests({
   async function cancel(friendshipId: number) {
     setCancelling(friendshipId);
     try {
-      await fetch(`${API_URL}/friends/cancel/${friendshipId}`, {
-        method: "DELETE",
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      await apiFetch(`/friends/cancel/${friendshipId}`, { method: "DELETE" });
       onCancelled(friendshipId);
     } finally {
       setCancelling(null);

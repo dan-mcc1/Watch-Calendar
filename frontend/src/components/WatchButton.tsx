@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef } from "react";
-import { getAuth, User } from "firebase/auth";
-import { firebaseApp } from "../firebase";
-import { API_URL } from "../constants";
+import { apiFetch } from "../utils/apiFetch";
+import { useAuthUser } from "../hooks/useAuthUser";
 import StarRating from "./StarRating";
 import { clearDashboardCache } from "../utils/dashboardCache";
 import { clearWatchlistCache } from "../utils/watchlistCache";
@@ -124,7 +123,7 @@ export default function WatchButton({
   onStatusChange,
   refreshKey,
 }: WatchButtonProps) {
-  const auth = getAuth(firebaseApp);
+  const user = useAuthUser();
   const [watchStatus, setWatchStatus] = useState<WatchStatus>(
     initialStatus ?? "none",
   );
@@ -155,24 +154,19 @@ export default function WatchButton({
     // Skip individual fetch when the parent already provided the status
     if (initialStatus !== undefined) return;
 
-    const unsubscribe = auth.onAuthStateChanged((user) => {
-      if (user) fetchStatus(user);
-      else {
-        setWatchStatus("none");
-        setStatusLoading(false);
-      }
-    });
-    return unsubscribe;
-  }, [contentId]);
+    if (user) {
+      fetchStatus(false);
+    } else {
+      setWatchStatus("none");
+      setStatusLoading(false);
+    }
+  }, [contentId, user]);
 
-  async function fetchStatus(user: User, silent = false) {
+  async function fetchStatus(silent = false) {
     try {
       if (!silent) setStatusLoading(true);
-      const res = await fetch(
-        `${API_URL}/watchlist/${contentType}/${contentId}/status`,
-        {
-          headers: { Authorization: `Bearer ${await user.getIdToken()}` },
-        },
+      const res = await apiFetch(
+        `/watchlist/${contentType}/${contentId}/status`,
       );
       if (!res.ok) throw new Error("Failed to fetch watch status");
       const data = await res.json();
@@ -189,22 +183,16 @@ export default function WatchButton({
   // (e.g. after marking all episodes watched via SeasonInfo)
   useEffect(() => {
     if (!refreshKey) return;
-    const user = auth.currentUser;
-    if (user) fetchStatus(user, true);
+    if (user) fetchStatus(true);
   }, [refreshKey]);
 
   async function updateWatchStatus(targetStatus: WatchStatus) {
-    const user = auth.currentUser;
     if (!user) {
       alert("You must be signed in.");
       return;
     }
 
-    const token = await user.getIdToken();
-    const headers = {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    };
+    const headers = { "Content-Type": "application/json" };
     const body = JSON.stringify({
       content_type: contentType,
       content_id: contentId,
@@ -233,13 +221,13 @@ export default function WatchButton({
       // treating the show as untracked (e.g. deleting episode history).
       const addUrl = addEndpoints[targetStatus];
       if (addUrl) {
-        await fetch(`${API_URL}/${addUrl}`, { method: "POST", headers, body });
+        await apiFetch(`/${addUrl}`, { method: "POST", headers, body });
       }
 
       // Remove from current state
       const removeUrl = removeEndpoints[watchStatus];
       if (removeUrl) {
-        await fetch(`${API_URL}/${removeUrl}`, {
+        await apiFetch(`/${removeUrl}`, {
           method: "DELETE",
           headers,
           body,
@@ -271,16 +259,12 @@ export default function WatchButton({
   }
 
   async function saveRating(newRating: number | null) {
-    const user = auth.currentUser;
     if (!user) return;
     try {
       setRatingSaving(true);
-      await fetch(`${API_URL}/watched/rate`, {
+      await apiFetch("/watched/rate", {
         method: "PATCH",
-        headers: {
-          Authorization: `Bearer ${await user.getIdToken()}`,
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           content_type: contentType,
           content_id: contentId,

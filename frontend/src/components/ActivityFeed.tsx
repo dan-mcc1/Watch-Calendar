@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
-import { getAuth } from "firebase/auth";
-import { firebaseApp } from "../firebase";
-import { API_URL, BASE_IMAGE_URL } from "../constants";
+import { BASE_IMAGE_URL } from "../constants";
 import { Link } from "react-router-dom";
+import { useAuthUser } from "../hooks/useAuthUser";
+import { apiFetch } from "../utils/apiFetch";
 
 interface ActivityItem {
   id: number;
@@ -33,27 +33,19 @@ function timeAgo(isoString: string) {
 }
 
 export default function ActivityFeed() {
-  const auth = getAuth(firebaseApp);
+  const user = useAuthUser();
   const [items, setItems] = useState<ActivityItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
-    const unsubscribe = auth.onAuthStateChanged(async (user) => {
-      if (!user) { setLoading(false); return; }
-      try {
-        const res = await fetch(`${API_URL}/friends/activity`, {
-          headers: { Authorization: `Bearer ${await user.getIdToken()}` },
-        });
-        if (res.ok) setItems(await res.json());
-      } catch (err) {
-        console.error(err);
-      } finally {
-        setLoading(false);
-      }
-    });
-    return unsubscribe;
-  }, []);
+    if (!user) { setLoading(false); return; }
+    apiFetch("/friends/activity")
+      .then((res) => { if (res.ok) return res.json(); })
+      .then((data) => { if (data) setItems(data); })
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  }, [user]);
 
   if (loading || items.length === 0) return null;
 

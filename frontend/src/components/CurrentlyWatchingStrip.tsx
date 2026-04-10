@@ -1,8 +1,8 @@
 import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { BASE_IMAGE_URL, API_URL } from "../constants";
+import { BASE_IMAGE_URL } from "../constants";
 import type { Show, Movie } from "../types/calendar";
-import type { User } from "firebase/auth";
+import { apiFetch } from "../utils/apiFetch";
 
 interface NextEpisode {
   finished: boolean;
@@ -50,14 +50,12 @@ function formatToLocalTime(time24: string, sourceTimeZone: string): string {
 
 interface ShowCardProps {
   show: Show;
-  token: string;
   initialNext: NextEpisode | null;
   onEpisodeWatched: (showId: number, season: number, episode: number) => void;
 }
 
 function ShowCard({
   show,
-  token,
   initialNext,
   onEpisodeWatched,
 }: ShowCardProps) {
@@ -75,15 +73,13 @@ function ShowCard({
     if (!next || next.finished || marking) return;
     setMarking(true);
     try {
-      await fetch(
-        `${API_URL}/watched-episode/add?show_id=${show.id}&season_number=${next.season_number}&episode_number=${next.episode_number}`,
-        { method: "POST", headers: { Authorization: `Bearer ${token}` } },
+      await apiFetch(
+        `/watched-episode/add?show_id=${show.id}&season_number=${next.season_number}&episode_number=${next.episode_number}`,
+        { method: "POST" },
       );
       onEpisodeWatched(show.id, next.season_number!, next.episode_number!);
       // Fetch next episode after marking
-      const r = await fetch(`${API_URL}/watched-episode/${show.id}/next`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const r = await apiFetch(`/watched-episode/${show.id}/next`);
       setNext(await r.json());
     } catch {
       // ignore
@@ -278,38 +274,25 @@ function ShowCard({
 interface Props {
   shows: Show[];
   movies: Movie[];
-  user: User | null;
   onEpisodeWatched?: (showId: number, season: number, episode: number) => void;
 }
 
 export default function CurrentlyWatchingStrip({
   shows,
   movies,
-  user,
   onEpisodeWatched,
 }: Props) {
   const [open, setOpen] = useState(false);
-  const [token, setToken] = useState<string | null>(null);
   const [nextEpisodes, setNextEpisodes] = useState<Record<number, NextEpisode>>(
     {},
   );
   const total = shows.length + movies.length;
 
-  useEffect(() => {
-    if (!user) return;
-    user
-      .getIdToken()
-      .then(setToken)
-      .catch(() => {});
-  }, [user]);
-
   // Fetch all next-episodes in one bulk request when the strip opens
   useEffect(() => {
-    if (!open || !token || shows.length === 0) return;
+    if (!open || shows.length === 0) return;
     const ids = shows.map((s) => s.id).join(",");
-    fetch(`${API_URL}/watched-episode/next/bulk?show_ids=${ids}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
+    apiFetch(`/watched-episode/next/bulk?show_ids=${ids}`)
       .then((r) => r.json())
       .then((data: Record<string, NextEpisode>) => {
         const parsed: Record<number, NextEpisode> = {};
@@ -317,7 +300,7 @@ export default function CurrentlyWatchingStrip({
         setNextEpisodes(parsed);
       })
       .catch(() => {});
-  }, [open, token, shows]);
+  }, [open, shows]);
 
   if (total === 0) return null;
 
@@ -354,16 +337,14 @@ export default function CurrentlyWatchingStrip({
         <div className="px-4 sm:px-6 pb-4 pt-1">
           <div className="flex gap-4 overflow-x-auto pb-2">
             {/* TV shows with next-episode info */}
-            {token &&
-              shows.map((show) => (
-                <ShowCard
-                  key={`tv-${show.id}`}
-                  show={show}
-                  token={token}
-                  initialNext={nextEpisodes[show.id] ?? null}
-                  onEpisodeWatched={onEpisodeWatched ?? (() => {})}
-                />
-              ))}
+            {shows.map((show) => (
+              <ShowCard
+                key={`tv-${show.id}`}
+                show={show}
+                initialNext={nextEpisodes[show.id] ?? null}
+                onEpisodeWatched={onEpisodeWatched ?? (() => {})}
+              />
+            ))}
 
             {/* Movies */}
             {movies.map((movie) => (
