@@ -2,7 +2,7 @@ import { BASE_IMAGE_URL } from "../constants";
 import { Link } from "react-router-dom";
 import { Movie, Show, Person, CollectionResult } from "../types/calendar";
 import { parseLocalDate } from "../utils/date";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useAuthUser } from "../hooks/useAuthUser";
 import { apiFetch } from "../utils/apiFetch";
 import WatchButton, { WatchStatus } from "./WatchButton";
@@ -381,15 +381,15 @@ export default function MediaList({
   const [statusMap, setStatusMap] = useState<StatusMap | undefined>(undefined);
   const isSignedIn = !!user;
 
-  const movies = results.movies ?? [];
-  const shows = results.shows ?? [];
+  const movies = useMemo(() => results.movies ?? [], [results.movies]);
+  const shows = useMemo(() => results.shows ?? [], [results.shows]);
   const people = results.people ?? [];
 
   // Fetch all statuses in one request instead of one per WatchButton.
   // Wait for auth state before fetching so currentUser is available.
   useEffect(() => {
     if (!showWatchButton) {
-      setStatusMap({});
+      setStatusMap((prev) => prev ?? {});
       return;
     }
 
@@ -399,7 +399,7 @@ export default function MediaList({
     ];
 
     if (!user || !items.length) {
-      setStatusMap({});
+      setStatusMap((prev) => prev ?? {});
       return;
     }
     const { cached, missing } = getCachedStatuses(user.uid, items);
@@ -426,11 +426,8 @@ export default function MediaList({
         >);
       })
       .catch(() =>
-        setStatusMap(
-          cached as Record<
-            string,
-            { status: WatchStatus; rating: number | null }
-          >,
+        setStatusMap((prev) =>
+          prev ?? (cached as Record<string, { status: WatchStatus; rating: number | null }>)
         ),
       );
   }, [movies, shows, showWatchButton, user]);

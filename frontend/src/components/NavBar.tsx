@@ -412,7 +412,7 @@ export default function NavBar() {
           {/* Logo + desktop nav */}
           <div className="flex flex-1 items-center justify-center lg:items-stretch lg:justify-start">
             <div className="flex shrink-0 items-center text-white">
-              <a href="/" className="flex items-center gap-2 shrink-0">
+              <a href="/calendar" className="flex items-center gap-2 shrink-0">
                 <img
                   src="/favicon-1024.png"
                   className="h-15 w-auto"
@@ -425,9 +425,9 @@ export default function NavBar() {
             <div className="hidden lg:ml-6 lg:flex lg:items-center lg:gap-1">
               {/* Calendar */}
               <Link
-                to="/"
+                to="/calendar"
                 className={classNames(
-                  location.pathname === "/"
+                  location.pathname === "/calendar"
                     ? "bg-neutral-950/50 text-white"
                     : "text-neutral-300 hover:bg-white/5 hover:text-white",
                   "rounded-md px-3 py-2 text-sm font-medium",
@@ -697,18 +697,18 @@ export default function NavBar() {
             )}
           </form>
 
-          {/* Dashboard */}
+          {/* Calendar */}
           <DisclosureButton
             as="a"
-            href="/"
+            href="/calendar"
             className={classNames(
-              location.pathname === "/"
+              location.pathname === "/calendar"
                 ? "bg-neutral-950/50 text-white"
                 : "text-neutral-300 hover:bg-white/5 hover:text-white",
               "block rounded-md px-3 py-2 text-base font-medium",
             )}
           >
-            Dashboard
+            Calendar
           </DisclosureButton>
 
           {/* Discover accordion */}

@@ -3,7 +3,7 @@ import type { Episode, Movie, Show } from "../types/calendar";
 import { BASE_IMAGE_URL } from "../constants";
 import { apiFetch } from "../utils/apiFetch";
 import { Link } from "react-router-dom";
-import type { CalendarItem } from "./Calendar";
+import type { CalendarItem } from "../utils/calendarUtils";
 
 interface Props {
   items: CalendarItem[];

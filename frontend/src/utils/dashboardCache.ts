@@ -7,6 +7,9 @@ interface DashboardCache {
   watchedEpisodeKeys: Set<string>;
   currentlyWatchingShows: Show[];
   currentlyWatchingMovies: Movie[];
+  /** Earliest and latest month keys (YYYY-MM) that have been loaded */
+  loadedFrom: string;
+  loadedTo: string;
   uid: string;
   cachedAt: number;
 }

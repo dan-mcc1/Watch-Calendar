@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { BASE_IMAGE_URL } from "../constants";
 import type { Show, Movie } from "../types/calendar";
 import { apiFetch } from "../utils/apiFetch";
+import { useAuthUser } from "../hooks/useAuthUser";
 
 interface NextEpisode {
   finished: boolean;
@@ -51,7 +52,7 @@ function formatToLocalTime(time24: string, sourceTimeZone: string): string {
 interface ShowCardProps {
   show: Show;
   initialNext: NextEpisode | null;
-  onEpisodeWatched: (showId: number, season: number, episode: number) => void;
+  onEpisodeWatched?: (showId: number, season: number, episode: number) => void;
 }
 
 function ShowCard({
@@ -77,7 +78,7 @@ function ShowCard({
         `/watched-episode/add?show_id=${show.id}&season_number=${next.season_number}&episode_number=${next.episode_number}`,
         { method: "POST" },
       );
-      onEpisodeWatched(show.id, next.season_number!, next.episode_number!);
+      onEpisodeWatched?.(show.id, next.season_number!, next.episode_number!);
       // Fetch next episode after marking
       const r = await apiFetch(`/watched-episode/${show.id}/next`);
       setNext(await r.json());
@@ -271,22 +272,26 @@ function ShowCard({
   );
 }
 
-interface Props {
-  shows: Show[];
-  movies: Movie[];
-  onEpisodeWatched?: (showId: number, season: number, episode: number) => void;
-}
-
-export default function CurrentlyWatchingStrip({
-  shows,
-  movies,
-  onEpisodeWatched,
-}: Props) {
+export default function CurrentlyWatchingStrip() {
+  const user = useAuthUser();
+  const [shows, setShows] = useState<Show[]>([]);
+  const [movies, setMovies] = useState<Movie[]>([]);
   const [open, setOpen] = useState(false);
-  const [nextEpisodes, setNextEpisodes] = useState<Record<number, NextEpisode>>(
-    {},
-  );
+  const [nextEpisodes, setNextEpisodes] = useState<Record<number, NextEpisode>>({});
   const total = shows.length + movies.length;
+
+  // Fetch currently watching data
+  useEffect(() => {
+    if (!user) return;
+    apiFetch("/currently-watching/")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (!data) return;
+        setShows(data.shows ?? []);
+        setMovies(data.movies ?? []);
+      })
+      .catch(() => {});
+  }, [user]);
 
   // Fetch all next-episodes in one bulk request when the strip opens
   useEffect(() => {
@@ -342,7 +347,6 @@ export default function CurrentlyWatchingStrip({
                 key={`tv-${show.id}`}
                 show={show}
                 initialNext={nextEpisodes[show.id] ?? null}
-                onEpisodeWatched={onEpisodeWatched ?? (() => {})}
               />
             ))}
 

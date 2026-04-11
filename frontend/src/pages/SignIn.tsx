@@ -156,7 +156,7 @@ const SignIn: React.FC = () => {
     setIsLoading(true);
     try {
       await signInWithEmailAndPassword(auth, email, password);
-      navigate("/");
+      navigate("/calendar");
     } catch (error) {
       console.error("Error logging in:", error);
       setErrorMessage("Invalid email or password.");
@@ -184,7 +184,7 @@ const SignIn: React.FC = () => {
     try {
       const res = await createUserWithEmailAndPassword(auth, email, password);
       await registerUserInBackend(res.user, username);
-      navigate("/");
+      navigate("/calendar");
     } catch (err: any) {
       console.error("Error registering:", err);
 
@@ -223,7 +223,7 @@ const SignIn: React.FC = () => {
     } catch {
       // non-critical — proceed anyway
     }
-    navigate("/");
+    navigate("/calendar");
   }
 
   // Submit chosen username for OAuth user
@@ -257,7 +257,7 @@ const SignIn: React.FC = () => {
         setErrorMessage(err.detail ?? "Failed to set username.");
         return;
       }
-      navigate("/");
+      navigate("/calendar");
     } catch {
       setErrorMessage("Network error.");
     } finally {
