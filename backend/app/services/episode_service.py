@@ -550,9 +550,19 @@ def check_and_reactivate_watched_shows(db: Session):
         all_episodes = all_episodes_by_show[show_id]
         watched_keys = watched_keys_by_user_show[(user_id, show_id)]
 
+        # Determine the highest season the user has watched any episode of
+        max_watched_season = max((sn for sn, _ in watched_keys), default=0)
+
+        today = date.today()
         new_episodes = [
             ep for ep in all_episodes
             if (ep.season_number, ep.episode_number) not in watched_keys
+            and (
+                # New season: always reactivate (enables advance notifications)
+                ep.season_number > max_watched_season
+                # Same season already in progress: only reactivate once the episode has aired
+                or (ep.air_date is not None and ep.air_date <= today)
+            )
         ]
 
         if not new_episodes:

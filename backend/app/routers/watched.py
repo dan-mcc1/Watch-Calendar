@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Body, BackgroundTasks, HTTPException, Request, Query
+from fastapi import APIRouter, Depends, Body, BackgroundTasks, HTTPException, Request
 from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.services.watched_service import (
@@ -69,12 +69,8 @@ def remove_item(
 def get_user_watched(
     db: Session = Depends(get_db),
     uid: str = Depends(get_current_user),
-    page: int = Query(1, ge=1),
-    per_page: int = Query(20, ge=1, le=100),
-    sort: str = Query("watched_desc"),
-    search: str = Query(""),
 ):
-    return get_watched(db, uid, page=page, per_page=per_page, sort=sort, search=search)
+    return get_watched(db, uid)
 
 
 @router.get("/tv")

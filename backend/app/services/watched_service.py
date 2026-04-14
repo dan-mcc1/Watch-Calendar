@@ -1,6 +1,6 @@
 # app/services/watched_service.py
 from sqlalchemy.orm import Session
-from sqlalchemy import and_, nullslast, nullsfirst
+from sqlalchemy import and_
 from datetime import datetime
 from app.models.watched import Watched
 from app.models.movie import Movie
@@ -251,6 +251,10 @@ def remove_from_watched(db: Session, user_id: str, content_type: str, content_id
 
         still_tracked = _is_on_other_list(db, user_id, content_type, content_id)
 
+        # If the user is no longer on any list for this TV show, clear their episode progress
+        if not still_tracked and content_type == "tv":
+            db.query(EpisodeWatched).filter_by(user_id=user_id, show_id=content_id).delete()
+
         if not still_tracked:
             if content_type == "movie":
                 movie = db.query(Movie).filter_by(id=content_id).first()
@@ -272,57 +276,14 @@ def remove_from_watched(db: Session, user_id: str, content_type: str, content_id
     return {"message": "Not found in watched list"}
 
 
-def _watched_order_clause(sort: str, content_type: str):
-    is_movie = content_type == "movie"
-    date_col = Movie.release_date if is_movie else Show.first_air_date
-    title_col = Movie.title if is_movie else Show.name
-    rating_col = Movie.vote_average if is_movie else Show.vote_average
-    return {
-        "title_asc":        title_col.asc(),
-        "title_desc":       title_col.desc(),
-        "date_desc":        nullslast(date_col.desc()),
-        "date_asc":         nullsfirst(date_col.asc()),
-        "tmdb_rating_desc": nullslast(rating_col.desc()),
-        "tmdb_rating_asc":  nullsfirst(rating_col.asc()),
-        "rating_desc":      nullslast(Watched.rating.desc()),
-        "rating_asc":       nullsfirst(Watched.rating.asc()),
-        "watched_desc":     Watched.watched_at.desc(),
-        "watched_asc":      Watched.watched_at.asc(),
-    }.get(sort, Watched.watched_at.desc())
-
-
-def get_watched(db: Session, user_id: str, *, page: int = 1, per_page: int = 0, sort: str = "watched_desc", search: str = ""):
-    movies, movies_total = _get_watched_items(db, user_id, "movie", page=page, per_page=per_page, sort=sort, search=search)
-    shows, shows_total = _get_watched_items(db, user_id, "tv", page=page, per_page=per_page, sort=sort, search=search)
-    return {
-        "movies": movies,
-        "movies_total": movies_total,
-        "shows": shows,
-        "shows_total": shows_total,
-        "page": page,
-        "per_page": per_page,
-    }
-
-
-def _get_watched_items(
-    db: Session,
-    user_id: str,
-    content_type: str,
-    *,
-    page: int = 1,
-    per_page: int = 0,
-    sort: str = "watched_desc",
-    search: str = "",
-):
+def _get_watched_items(db: Session, user_id: str, content_type: str):
     if content_type == "tv":
         model, options, content_id_col, serialize = Show, _show_query_options(), Show.id, serialize_show
-        title_col = Show.name
     else:
         model, options, content_id_col, serialize = Movie, _movie_query_options(), Movie.id, serialize_movie
-        title_col = Movie.title
 
-    q = (
-        db.query(model, Watched.rating)
+    rows = (
+        db.query(model, Watched.rating, Watched.watched_at)
         .options(*options)
         .select_from(Watched)
         .join(model, and_(
@@ -330,17 +291,15 @@ def _get_watched_items(
             Watched.content_type == content_type,
             Watched.user_id == user_id,
         ))
+        .all()
     )
+    return [
+        {**serialize(item), "user_rating": rating, "watched_at": watched_at.isoformat() if watched_at else None}
+        for item, rating, watched_at in rows
+    ]
 
-    if search:
-        q = q.filter(title_col.ilike(f"%{search}%"))
 
-    q = q.order_by(_watched_order_clause(sort, content_type))
-
-    total = q.count()
-
-    if per_page > 0:
-        q = q.offset((page - 1) * per_page).limit(per_page)
-
-    rows = q.all()
-    return [{**serialize(item), "user_rating": rating} for item, rating in rows], total
+def get_watched(db: Session, user_id: str):
+    movies = _get_watched_items(db, user_id, "movie")
+    shows = _get_watched_items(db, user_id, "tv")
+    return {"movies": movies, "shows": shows}

@@ -51,20 +51,18 @@ def remove_item(
 def get_user_watchlist(
     db: Session = Depends(get_db),
     uid: str = Depends(get_current_user),
-    page: int = Query(1, ge=1),
-    per_page: int = Query(20, ge=1, le=100),
-    sort: str = Query("added_desc"),
-    search: str = Query(""),
 ):
-    return get_watchlist(db, uid, page=page, per_page=per_page, sort=sort, search=search)
+    return get_watchlist(db, uid)
 
 
 @router.get("/tv/calendar")
 def watchlist_tv_calendar(
     db: Session = Depends(get_db),
     uid: str = Depends(get_current_user),
+    from_date: str = Query(None),
+    to_date: str = Query(None),
 ):
-    return get_tv_calendar(db, uid)
+    return get_tv_calendar(db, uid, from_date=from_date, to_date=to_date)
 
 
 @router.get("/tv")
