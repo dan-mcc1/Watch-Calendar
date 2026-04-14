@@ -67,26 +67,57 @@ async def _activity_cleanup_loop():
         await asyncio.sleep(3600)  # 1 hour
 
 
+# async def _daily_digest_loop():
+#     """Send daily email digest at 9am Eastern every day."""
+#     eastern = ZoneInfo("America/New_York")
+#     while True:
+#         now = datetime.now(eastern)
+#         next_run = now.replace(hour=9, minute=0, second=0, microsecond=0)
+#         if now >= next_run:
+#             next_run += timedelta(days=1)
+#         wait_seconds = (next_run - now).total_seconds()
+#         await asyncio.sleep(wait_seconds)
+#         print("[daily digest] Firing now...")
+#         try:
+#             db = SessionLocal()
+#             send_daily_digest_to_all(db)
+#             send_season_premiere_alerts_to_all(db)
+#             print("[daily digest] Done — emails sent")
+#         except Exception as e:
+#             print(f"[daily digest] Error: {e}")
+#         finally:
+#             db.close()
+
+
 async def _daily_digest_loop():
-    """Send daily email digest at 9am Eastern every day."""
     eastern = ZoneInfo("America/New_York")
+
     while True:
-        now = datetime.now(eastern)
-        next_run = now.replace(hour=9, minute=0, second=0, microsecond=0)
-        if now >= next_run:
-            next_run += timedelta(days=1)
-        wait_seconds = (next_run - now).total_seconds()
-        await asyncio.sleep(wait_seconds)
-        print("[daily digest] Firing now...")
         try:
+            now = datetime.now(eastern)
+            next_run = now.replace(hour=9, minute=0, second=0, microsecond=0)
+
+            if now >= next_run:
+                next_run += timedelta(days=1)
+
+            wait_seconds = (next_run - now).total_seconds()
+
+            print(f"[daily digest] Sleeping for {wait_seconds:.2f}s")
+            await asyncio.sleep(wait_seconds)
+
+            print("[daily digest] Firing now...")
+
             db = SessionLocal()
-            send_daily_digest_to_all(db)
-            send_season_premiere_alerts_to_all(db)
-            print("[daily digest] Done — emails sent")
+            try:
+                send_daily_digest_to_all(db)
+                send_season_premiere_alerts_to_all(db)
+                print("[daily digest] Done — emails sent")
+            finally:
+                db.close()
+
         except Exception as e:
-            print(f"[daily digest] Error: {e}")
-        finally:
-            db.close()
+            print(f"[daily digest] Loop error: {e}")
+            await asyncio.sleep(60)  # prevent tight crash loop
 
 
 async def _episode_update_loop():
