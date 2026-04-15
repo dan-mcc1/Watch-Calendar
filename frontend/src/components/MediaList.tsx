@@ -159,11 +159,12 @@ function MediaRow({
             </div>
           </div>
           {showWatchButton && (
-            <div className="flex-shrink-0 hidden sm:block">
+            <div className="flex-shrink-0">
               {statusMap === undefined ? (
-                <div className="h-9 w-36 rounded-xl bg-neutral-700 animate-pulse" />
+                <div className="h-9 w-9 sm:w-36 rounded-xl bg-neutral-700 animate-pulse" />
               ) : (
                 <WatchButton
+                  compact
                   contentType={type}
                   contentId={item.id}
                   initialStatus={statusMap[`${type}:${item.id}`]?.status}
@@ -180,21 +181,6 @@ function MediaRow({
           </p>
         )}
 
-        {/* WatchButton on mobile (below overview) */}
-        {showWatchButton && (
-          <div className="sm:hidden mt-1">
-            {statusMap === undefined ? (
-              <div className="h-9 w-36 rounded-xl bg-neutral-700 animate-pulse" />
-            ) : (
-              <WatchButton
-                contentType={type}
-                contentId={item.id}
-                initialStatus={statusMap[`${type}:${item.id}`]?.status}
-                initialRating={statusMap[`${type}:${item.id}`]?.rating}
-              />
-            )}
-          </div>
-        )}
       </div>
     </div>
   );

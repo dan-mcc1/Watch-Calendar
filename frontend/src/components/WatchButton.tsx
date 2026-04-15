@@ -440,7 +440,9 @@ export default function WatchButton({
         )}
       </div>
       {watchStatus === "Watched" && (
-        <StarRating rating={rating} onRate={saveRating} saving={ratingSaving} />
+        <div className={compact ? "hidden sm:block" : undefined}>
+          <StarRating rating={rating} onRate={saveRating} saving={ratingSaving} />
+        </div>
       )}
     </div>
   );
