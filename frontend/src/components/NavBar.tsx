@@ -89,7 +89,7 @@ function NavDropdown({
           />
         </svg>
       </MenuButton>
-      <MenuItems className="absolute left-0 z-20 mt-1 w-44 origin-top-left rounded-lg bg-neutral-800 border border-white/10 py-1 shadow-xl transition data-closed:scale-95 data-closed:opacity-0 data-enter:duration-100 data-enter:ease-out data-leave:duration-75 data-leave:ease-in">
+      <MenuItems modal={false} className="absolute left-0 z-20 mt-1 w-44 origin-top-left rounded-lg bg-neutral-800 border border-white/10 py-1 shadow-xl transition data-closed:scale-95 data-closed:opacity-0 data-enter:duration-100 data-enter:ease-out data-leave:duration-75 data-leave:ease-in">
         {links.map((link) => {
           const badge = badges?.[link.href] ?? 0;
           return (
@@ -368,7 +368,7 @@ export default function NavBar() {
   return (
     <Disclosure
       as="nav"
-      className="sticky top-0 z-50 bg-primary-800 after:pointer-events-none after:absolute after:inset-x-0 after:bottom-0 after:h-px after:bg-white/10"
+      className="fixed top-0 left-0 right-0 z-50 bg-primary-800 after:pointer-events-none after:absolute after:inset-x-0 after:bottom-0 after:h-px after:bg-white/10"
     >
       <div className="mx-auto max-w-7xl px-4 lg:px-8">
         <div className="relative flex h-16 items-center justify-between">
@@ -597,6 +597,7 @@ export default function NavBar() {
                   </div>
                 </MenuButton>
                 <MenuItems
+                  modal={false}
                   transition
                   className="absolute right-0 z-20 mt-2 w-48 origin-top-right rounded-md bg-neutral-800 py-1 outline -outline-offset-1 outline-white/10 transition data-closed:scale-95 data-closed:transform data-closed:opacity-0 data-enter:duration-100 data-enter:ease-out data-leave:duration-75 data-leave:ease-in"
                 >

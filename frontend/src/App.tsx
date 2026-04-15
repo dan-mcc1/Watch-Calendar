@@ -31,10 +31,18 @@ function App() {
     <BrowserRouter>
       <div className="flex flex-col min-h-screen bg-neutral-950 text-neutral-100">
         <NavBar />
+        <div className="h-16 shrink-0" />
         <InstallBanner />
         <Routes>
           <Route path="/" element={<LandingPage />} />
-          <Route path="/calendar" element={<ProtectedRoute><CalendarPage /></ProtectedRoute>} />
+          <Route
+            path="/calendar"
+            element={
+              <ProtectedRoute>
+                <CalendarPage />
+              </ProtectedRoute>
+            }
+          />
           <Route path="/search" element={<Search />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/signIn" element={<SignIn />} />
@@ -49,7 +57,10 @@ function App() {
           <Route path="/profile" element={<ProfilePage />} />
           <Route path="/user/:username" element={<FriendProfilePage />} />
           <Route path="/activity" element={<ActivityFeedPage />} />
-          <Route path="/tv/:showId/episode/:season/:episode" element={<EpisodeInfo />} />
+          <Route
+            path="/tv/:showId/episode/:season/:episode"
+            element={<EpisodeInfo />}
+          />
           <Route path="/box-office" element={<BoxOffice />} />
           <Route path="/collection/:id" element={<CollectionInfo />} />
           <Route path="/for-you" element={<ForYou />} />
