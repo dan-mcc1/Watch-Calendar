@@ -26,6 +26,7 @@ from app.routers import (
     reviews,
     box_office,
     collections,
+    calendar,
     dev,
 )
 from fastapi.middleware.cors import CORSMiddleware
@@ -210,5 +211,6 @@ app.include_router(events.router, prefix="/events", tags=["events"])
 app.include_router(reviews.router, prefix="/reviews", tags=["reviews"])
 app.include_router(box_office.router, prefix="/box-office", tags=["box-office"])
 app.include_router(collections.router, prefix="/collections", tags=["collections"])
+app.include_router(calendar.router, prefix="/calendar", tags=["calendar"])
 if settings.ENVIRONMENT != "production":
     app.include_router(dev.router, prefix="/dev", tags=["dev"])

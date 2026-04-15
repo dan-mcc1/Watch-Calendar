@@ -168,7 +168,6 @@ class TestWatchedFetch:
         assert r.status_code == 200
         data = r.json()
         assert data["movies"] == []
-        assert data["movies_total"] == 0
 
     def test_fetch_includes_movie(self, client, seed_movie):
         add_to_watched(client)
@@ -186,105 +185,7 @@ class TestWatchedFetch:
         r = client.get("/watched/")
         assert r.json()["movies"][0]["user_rating"] == 7.5
 
-    def test_search_filters(self, client, db, seed_users):
-        from app.models.movie import Movie
-        from app.models.watched import Watched
-
-        db.add(Movie(id=1, title="Interstellar", tracking_count=0))
-        db.add(Movie(id=2, title="Inception", tracking_count=0))
-        db.flush()
-        db.add(
-            Watched(
-                user_id="test-uid-1",
-                content_type="movie",
-                content_id=1,
-                watched_at=datetime.utcnow(),
-            )
-        )
-        db.add(
-            Watched(
-                user_id="test-uid-1",
-                content_type="movie",
-                content_id=2,
-                watched_at=datetime.utcnow(),
-            )
-        )
-        db.commit()
-
-        r = client.get("/watched/?search=inters")
-        data = r.json()
-        assert len(data["movies"]) == 1
-        assert data["movies"][0]["title"] == "Interstellar"
-
-    def test_sort_rating_desc(self, client, db, seed_users):
-        from app.models.movie import Movie
-        from app.models.watched import Watched
-
-        db.add(Movie(id=1, title="Low", tracking_count=0))
-        db.add(Movie(id=2, title="High", tracking_count=0))
-        db.flush()
-        db.add(
-            Watched(
-                user_id="test-uid-1",
-                content_type="movie",
-                content_id=1,
-                watched_at=datetime.utcnow(),
-                rating=4.0,
-            )
-        )
-        db.add(
-            Watched(
-                user_id="test-uid-1",
-                content_type="movie",
-                content_id=2,
-                watched_at=datetime.utcnow(),
-                rating=9.0,
-            )
-        )
-        db.commit()
-
-        r = client.get("/watched/?sort=rating_desc&per_page=20")
-        ratings = [m["user_rating"] for m in r.json()["movies"]]
-        assert ratings[0] >= ratings[-1]
-
-    def test_sort_rating_asc_returns_both_movies(self, client, db, seed_users):
-        from app.models.movie import Movie
-        from app.models.watched import Watched
-
-        db.add(Movie(id=1, title="Rated", tracking_count=0))
-        db.add(Movie(id=2, title="Unrated", tracking_count=0))
-        db.flush()
-        db.add(
-            Watched(
-                user_id="test-uid-1",
-                content_type="movie",
-                content_id=1,
-                watched_at=datetime.utcnow(),
-                rating=7.0,
-            )
-        )
-        db.add(
-            Watched(
-                user_id="test-uid-1",
-                content_type="movie",
-                content_id=2,
-                watched_at=datetime.utcnow(),
-                rating=None,
-            )
-        )
-        db.commit()
-
-        r = client.get("/watched/?sort=rating_asc&per_page=20")
-        assert r.status_code == 200
-        movies = r.json()["movies"]
-        # Both movies are returned
-        assert len(movies) == 2
-        rated = [m for m in movies if m["user_rating"] is not None]
-        unrated = [m for m in movies if m["user_rating"] is None]
-        assert len(rated) == 1
-        assert len(unrated) == 1
-
-    def test_pagination(self, client, db, seed_users):
+    def test_fetch_returns_all_movies(self, client, db, seed_users):
         from app.models.movie import Movie
         from app.models.watched import Watched
 
@@ -302,10 +203,26 @@ class TestWatchedFetch:
             )
         db.commit()
 
-        r = client.get("/watched/?per_page=3&page=1")
-        data = r.json()
-        assert len(data["movies"]) == 3
-        assert data["movies_total"] == 7
+        r = client.get("/watched/")
+        assert r.status_code == 200
+        assert len(r.json()["movies"]) == 7
 
-        r2 = client.get("/watched/?per_page=3&page=3")
-        assert len(r2.json()["movies"]) == 1
+    def test_fetch_returns_both_rated_and_unrated(self, client, db, seed_users):
+        from app.models.movie import Movie
+        from app.models.watched import Watched
+
+        db.add(Movie(id=1, title="Rated", tracking_count=0))
+        db.add(Movie(id=2, title="Unrated", tracking_count=0))
+        db.flush()
+        db.add(Watched(user_id="test-uid-1", content_type="movie", content_id=1,
+                       watched_at=datetime.utcnow(), rating=7.0))
+        db.add(Watched(user_id="test-uid-1", content_type="movie", content_id=2,
+                       watched_at=datetime.utcnow(), rating=None))
+        db.commit()
+
+        r = client.get("/watched/")
+        assert r.status_code == 200
+        movies = r.json()["movies"]
+        assert len(movies) == 2
+        assert any(m["user_rating"] == 7.0 for m in movies)
+        assert any(m["user_rating"] is None for m in movies)

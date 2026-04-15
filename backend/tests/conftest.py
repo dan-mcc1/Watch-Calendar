@@ -39,18 +39,23 @@ sys.modules["firebase_admin.auth"] = firebase_mock
 sys.modules["firebase_admin.credentials"] = MagicMock()
 sys.modules["firebase_admin._apps"] = {}
 
-# ── SQLite test engine (StaticPool = one shared in-memory DB) ───────────────
+# -- SQLite test engine (StaticPool = one shared in-memory DB) ---------------
 engine = create_engine(
-    "sqlite://",
+    "sqlite:///./test.db",
     connect_args={"check_same_thread": False},
-    poolclass=StaticPool,
 )
-TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+# expire_on_commit=False prevents re-queries after commit, reducing cursor churn
+TestingSessionLocal = sessionmaker(
+    autocommit=False, autoflush=False, bind=engine, expire_on_commit=False
+)
 
 # Patch the app's session module BEFORE importing app code that uses it
 import app.db.session as _app_session
+
 _app_session.engine = engine
-_app_session.SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+_app_session.SessionLocal = sessionmaker(
+    autocommit=False, autoflush=False, bind=engine, expire_on_commit=False
+)
 
 from app.db.base import Base
 from app.db.session import get_db
@@ -58,6 +63,7 @@ from app.main import app
 
 # Disable rate limiting in tests so repeated calls don't get throttled
 from app.core.limiter import limiter
+
 limiter.enabled = False
 
 
@@ -101,15 +107,22 @@ def db():
     try:
         yield session
     finally:
+        session.rollback()
         session.close()
 
 
-def override_get_db():
-    session = TestingSessionLocal()
-    try:
-        yield session
-    finally:
-        session.close()
+def _make_override_get_db():
+    """Return a FastAPI dependency that creates its own session and always rolls back on close."""
+
+    def override_get_db():
+        session = TestingSessionLocal()
+        try:
+            yield session
+        finally:
+            session.rollback()
+            session.close()
+
+    return override_get_db
 
 
 def make_client(uid: str = "test-uid-1"):
@@ -117,9 +130,9 @@ def make_client(uid: str = "test-uid-1"):
     Return a TestClient authenticated as the given uid.
 
     Uses a header-based auth override so multiple clients with different
-    UIDs can coexist — the last make_client() call doesn't stomp earlier ones.
+    UIDs can coexist.
     """
-    app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[get_db] = _make_override_get_db()
 
     from app.dependencies.auth import get_current_user
 
@@ -149,7 +162,7 @@ def client2():
     return make_client("test-uid-2")
 
 
-# ── Pre-seeded DB helpers ────────────────────────────────────────────────────
+# -- Pre-seeded DB helpers ----------------------------------------------------
 
 
 @pytest.fixture

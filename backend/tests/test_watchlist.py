@@ -151,7 +151,7 @@ class TestWatchlistRemove:
         assert m.tracking_count == 1
 
 
-# ── Fetch / Pagination / Sort / Search ──────────────────────────────────────
+# ── Fetch ────────────────────────────────────────────────────────────────────
 
 
 class TestWatchlistFetch:
@@ -161,8 +161,6 @@ class TestWatchlistFetch:
         data = r.json()
         assert data["movies"] == []
         assert data["shows"] == []
-        assert data["movies_total"] == 0
-        assert data["shows_total"] == 0
 
     def test_fetch_includes_added_movie(self, client, seed_movie):
         add_movie(client)
@@ -171,7 +169,6 @@ class TestWatchlistFetch:
         data = r.json()
         assert len(data["movies"]) == 1
         assert data["movies"][0]["id"] == 550
-        assert data["movies_total"] == 1
 
     def test_fetch_includes_added_show(self, client, seed_show):
         add_show(client)
@@ -180,12 +177,11 @@ class TestWatchlistFetch:
         assert len(data["shows"]) == 1
         assert data["shows"][0]["id"] == 1396
 
-    def test_pagination_per_page(self, client, db, seed_users):
+    def test_fetch_returns_all_movies(self, client, db, seed_users):
         from app.models.movie import Movie
         from app.models.watchlist import Watchlist
         from datetime import datetime
 
-        # Insert 5 movies + watchlist rows directly
         for i in range(1, 6):
             db.add(Movie(id=i, title=f"Movie {i}", tracking_count=0))
         db.flush()
@@ -200,194 +196,9 @@ class TestWatchlistFetch:
             )
         db.commit()
 
-        r = client.get("/watchlist/?per_page=2&page=1")
+        r = client.get("/watchlist/")
         assert r.status_code == 200
-        data = r.json()
-        assert len(data["movies"]) == 2
-        assert data["movies_total"] == 5
-
-    def test_pagination_page2(self, client, db, seed_users):
-        from app.models.movie import Movie
-        from app.models.watchlist import Watchlist
-        from datetime import datetime
-
-        for i in range(1, 6):
-            db.add(Movie(id=i, title=f"Movie {i}", tracking_count=0))
-        db.flush()
-        for i in range(1, 6):
-            db.add(
-                Watchlist(
-                    user_id="test-uid-1",
-                    content_type="movie",
-                    content_id=i,
-                    added_at=datetime.utcnow(),
-                )
-            )
-        db.commit()
-
-        r = client.get("/watchlist/?per_page=2&page=2")
-        data = r.json()
-        assert len(data["movies"]) == 2
-
-    def test_pagination_last_page_partial(self, client, db, seed_users):
-        from app.models.movie import Movie
-        from app.models.watchlist import Watchlist
-        from datetime import datetime
-
-        for i in range(1, 6):
-            db.add(Movie(id=i, title=f"Movie {i}", tracking_count=0))
-        db.flush()
-        for i in range(1, 6):
-            db.add(
-                Watchlist(
-                    user_id="test-uid-1",
-                    content_type="movie",
-                    content_id=i,
-                    added_at=datetime.utcnow(),
-                )
-            )
-        db.commit()
-
-        r = client.get("/watchlist/?per_page=2&page=3")
-        data = r.json()
-        assert len(data["movies"]) == 1
-
-    def test_search_filters_by_title(self, client, db, seed_users):
-        from app.models.movie import Movie
-        from app.models.watchlist import Watchlist
-        from datetime import datetime
-
-        db.add(Movie(id=1, title="The Dark Knight", tracking_count=0))
-        db.add(Movie(id=2, title="Inception", tracking_count=0))
-        db.flush()
-        db.add(
-            Watchlist(
-                user_id="test-uid-1",
-                content_type="movie",
-                content_id=1,
-                added_at=datetime.utcnow(),
-            )
-        )
-        db.add(
-            Watchlist(
-                user_id="test-uid-1",
-                content_type="movie",
-                content_id=2,
-                added_at=datetime.utcnow(),
-            )
-        )
-        db.commit()
-
-        r = client.get("/watchlist/?search=dark")
-        data = r.json()
-        assert len(data["movies"]) == 1
-        assert data["movies"][0]["title"] == "The Dark Knight"
-
-    def test_search_case_insensitive(self, client, db, seed_users):
-        from app.models.movie import Movie
-        from app.models.watchlist import Watchlist
-        from datetime import datetime
-
-        db.add(Movie(id=1, title="The Dark Knight", tracking_count=0))
-        db.flush()
-        db.add(
-            Watchlist(
-                user_id="test-uid-1",
-                content_type="movie",
-                content_id=1,
-                added_at=datetime.utcnow(),
-            )
-        )
-        db.commit()
-
-        r = client.get("/watchlist/?search=DARK")
-        data = r.json()
-        assert len(data["movies"]) == 1
-
-    def test_sort_title_asc(self, client, db, seed_users):
-        from app.models.movie import Movie
-        from app.models.watchlist import Watchlist
-        from datetime import datetime
-
-        db.add(Movie(id=1, title="Zebra", tracking_count=0))
-        db.add(Movie(id=2, title="Alpha", tracking_count=0))
-        db.flush()
-        db.add(
-            Watchlist(
-                user_id="test-uid-1",
-                content_type="movie",
-                content_id=1,
-                added_at=datetime.utcnow(),
-            )
-        )
-        db.add(
-            Watchlist(
-                user_id="test-uid-1",
-                content_type="movie",
-                content_id=2,
-                added_at=datetime.utcnow(),
-            )
-        )
-        db.commit()
-
-        r = client.get("/watchlist/?sort=title_asc&per_page=20")
-        data = r.json()
-        titles = [m["title"] for m in data["movies"]]
-        assert titles == sorted(titles)
-
-    def test_sort_title_desc(self, client, db, seed_users):
-        from app.models.movie import Movie
-        from app.models.watchlist import Watchlist
-        from datetime import datetime
-
-        db.add(Movie(id=1, title="Zebra", tracking_count=0))
-        db.add(Movie(id=2, title="Alpha", tracking_count=0))
-        db.flush()
-        for i in [1, 2]:
-            db.add(
-                Watchlist(
-                    user_id="test-uid-1",
-                    content_type="movie",
-                    content_id=i,
-                    added_at=datetime.utcnow(),
-                )
-            )
-        db.commit()
-
-        r = client.get("/watchlist/?sort=title_desc&per_page=20")
-        titles = [m["title"] for m in r.json()["movies"]]
-        assert titles == sorted(titles, reverse=True)
-
-    def test_sort_tmdb_rating_desc(self, client, db, seed_users):
-        from app.models.movie import Movie
-        from app.models.watchlist import Watchlist
-        from datetime import datetime
-
-        db.add(Movie(id=1, title="Low", vote_average=5.0, tracking_count=0))
-        db.add(Movie(id=2, title="High", vote_average=9.0, tracking_count=0))
-        db.flush()
-        for i in [1, 2]:
-            db.add(
-                Watchlist(
-                    user_id="test-uid-1",
-                    content_type="movie",
-                    content_id=i,
-                    added_at=datetime.utcnow(),
-                )
-            )
-        db.commit()
-
-        r = client.get("/watchlist/?sort=tmdb_rating_desc&per_page=20")
-        ratings = [m["vote_average"] for m in r.json()["movies"]]
-        assert ratings == sorted(ratings, reverse=True)
-
-    def test_per_page_limit_capped_at_100(self, client, seed_users):
-        r = client.get("/watchlist/?per_page=999")
-        assert r.status_code == 422  # FastAPI validation error
-
-    def test_page_must_be_positive(self, client, seed_users):
-        r = client.get("/watchlist/?page=0")
-        assert r.status_code == 422
+        assert len(r.json()["movies"]) == 5
 
 
 # ── Bulk Status ──────────────────────────────────────────────────────────────

@@ -14,6 +14,7 @@ export type CalendarItem =
       showData: Movie;
       type: "movie";
       runtime: number;
+      is_watched: boolean;
     };
 
 export function buildAllItems(calendarData: CalendarData): CalendarItem[] {
@@ -36,6 +37,7 @@ export function buildAllItems(calendarData: CalendarData): CalendarItem[] {
       type: "movie" as const,
       air_date: movie.release_date,
       runtime: movie.runtime,
+      is_watched: movie.is_watched,
     })),
   ];
 }
@@ -56,15 +58,11 @@ export function applyFilters(
   items: CalendarItem[],
   filterType: "all" | "tv" | "movie",
   watchFilter: "all" | "watched" | "unwatched",
-  watchedEpisodeKeys: Set<string>,
 ): CalendarItem[] {
-  let filtered = filterType === "all" ? items : items.filter((i) => i.type === filterType);
-  const isWatched = (item: CalendarItem) =>
-    item.type === "movie"
-      ? item.showData.isWatched === true
-      : watchedEpisodeKeys.has(`${item.show_id}_${item.season_number}_${item.episode_number}`);
-  if (watchFilter === "watched") filtered = filtered.filter(isWatched);
-  if (watchFilter === "unwatched") filtered = filtered.filter((i) => !isWatched(i));
+  let filtered =
+    filterType === "all" ? items : items.filter((i) => i.type === filterType);
+  if (watchFilter === "watched") filtered = filtered.filter((i) => i.is_watched);
+  if (watchFilter === "unwatched") filtered = filtered.filter((i) => !i.is_watched);
   return filtered;
 }
 
@@ -79,13 +77,15 @@ export function getDaysInMonth(
   allItems: CalendarItem[],
   filterType: "all" | "tv" | "movie",
   watchFilter: "all" | "watched" | "unwatched",
-  watchedEpisodeKeys: Set<string>,
 ): DayItem[] {
   const date = new Date(year, month, 1);
   const days: DayItem[] = [];
   while (date.getMonth() === month) {
     const raw = getItemsForDate(allItems, date);
-    days.push({ date: new Date(date), items: applyFilters(raw, filterType, watchFilter, watchedEpisodeKeys) });
+    days.push({
+      date: new Date(date),
+      items: applyFilters(raw, filterType, watchFilter),
+    });
     date.setDate(date.getDate() + 1);
   }
   return days;
@@ -96,7 +96,6 @@ export function getWeekDays(
   allItems: CalendarItem[],
   filterType: "all" | "tv" | "movie",
   watchFilter: "all" | "watched" | "unwatched",
-  watchedEpisodeKeys: Set<string>,
 ): DayItem[] {
   const start = new Date(selectedDate);
   start.setDate(selectedDate.getDate() - selectedDate.getDay());
@@ -104,7 +103,7 @@ export function getWeekDays(
     const d = new Date(start);
     d.setDate(start.getDate() + i);
     const raw = getItemsForDate(allItems, d);
-    return { date: d, items: applyFilters(raw, filterType, watchFilter, watchedEpisodeKeys) };
+    return { date: d, items: applyFilters(raw, filterType, watchFilter) };
   });
 }
 
@@ -126,7 +125,11 @@ export function formatAirTimeToLocal(
   }).format(now);
   const sourceDate = new Date(sourceDateStr);
   sourceDate.setHours(hour, minute, 0, 0);
-  return sourceDate.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit", hour12: true });
+  return sourceDate.toLocaleTimeString(undefined, {
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
 }
 
 export function countUpcomingThisMonth(
@@ -139,6 +142,10 @@ export function countUpcomingThisMonth(
     const dateStr = item.type === "tv" ? item.air_date : item.release_date;
     if (!dateStr) return false;
     const d = parseLocalDate(dateStr);
-    return d >= today && d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+    return (
+      d >= today &&
+      d.getMonth() === currentMonth &&
+      d.getFullYear() === currentYear
+    );
   }).length;
 }

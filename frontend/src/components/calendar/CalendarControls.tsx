@@ -1,7 +1,6 @@
 // frontend/src/components/calendar/CalendarControls.tsx
 import { useRef, useState } from "react";
 import { User } from "firebase/auth";
-import type { CalendarData } from "../../types/calendar";
 import WatchlistModal from "../WatchlistModal";
 
 export type ViewMode = "month" | "week" | "day";
@@ -21,8 +20,6 @@ interface Props {
   showWatchlist: boolean;
   onOpenWatchlist: () => void;
   onCloseWatchlist: () => void;
-  calendarData: CalendarData;
-  setCalendarData: React.Dispatch<React.SetStateAction<CalendarData>>;
 }
 
 export default function CalendarControls({
@@ -32,7 +29,6 @@ export default function CalendarControls({
   centerLabel, onPrev, onNext,
   user, onSyncCalendar,
   showWatchlist, onOpenWatchlist, onCloseWatchlist,
-  calendarData, setCalendarData,
 }: Props) {
   const [showFilters, setShowFilters] = useState(false);
   const filterRef = useRef<HTMLDivElement>(null);
@@ -178,8 +174,6 @@ export default function CalendarControls({
               <WatchlistModal
                 isOpen={showWatchlist}
                 onClose={onCloseWatchlist}
-                setCalendarData={setCalendarData}
-                calendarData={calendarData}
               />
             </>
           )}

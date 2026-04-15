@@ -2,7 +2,8 @@ import { useState, useEffect, useRef } from "react";
 import { apiFetch } from "../utils/apiFetch";
 import { useAuthUser } from "../hooks/useAuthUser";
 import StarRating from "./StarRating";
-import { clearDashboardCache } from "../utils/dashboardCache";
+import { useQueryClient } from "@tanstack/react-query";
+import { calendarQueryKey } from "../hooks/useCalendarData";
 import { clearWatchlistCache } from "../utils/watchlistCache";
 import { clearForYouCache } from "../pages/ForYou";
 import { updateCachedStatus } from "../utils/statusCache";
@@ -124,6 +125,7 @@ export default function WatchButton({
   refreshKey,
 }: WatchButtonProps) {
   const user = useAuthUser();
+  const queryClient = useQueryClient();
   const [watchStatus, setWatchStatus] = useState<WatchStatus>(
     initialStatus ?? "none",
   );
@@ -239,7 +241,7 @@ export default function WatchButton({
       onStatusChange?.(targetStatus);
       if (targetStatus !== "Watched") setRating(null);
       setMenuOpen(false);
-      clearDashboardCache();
+      if (user) queryClient.invalidateQueries({ queryKey: calendarQueryKey(user.uid) });
       clearWatchlistCache();
       clearForYouCache();
       if (user)
@@ -272,7 +274,7 @@ export default function WatchButton({
         }),
       });
       setRating(newRating);
-      clearDashboardCache();
+      if (user) queryClient.invalidateQueries({ queryKey: calendarQueryKey(user.uid) });
       clearWatchlistCache();
       clearForYouCache();
       if (user)

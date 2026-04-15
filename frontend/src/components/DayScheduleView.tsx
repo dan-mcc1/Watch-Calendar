@@ -3,12 +3,13 @@ import type { Episode, Movie, Show } from "../types/calendar";
 import { BASE_IMAGE_URL } from "../constants";
 import { apiFetch } from "../utils/apiFetch";
 import { Link } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
 import type { CalendarItem } from "../utils/calendarUtils";
+import { calendarQueryKey } from "../hooks/useCalendarData";
+import { useAuthUser } from "../hooks/useAuthUser";
 
 interface Props {
   items: CalendarItem[];
-  watchedEpisodeKeys?: Set<string>;
-  onMarkWatched?: (showId: number, season: number, episode: number) => void;
 }
 
 // Converts 24-hour time in a given source timezone to user's local time
@@ -115,13 +116,13 @@ function TypeBadge({ type }: { type: "tv" | "movie" }) {
 
 interface ItemCardProps {
   item: CalendarItem;
-  isWatched?: boolean;
-  onMarkWatched?: (showId: number, season: number, episode: number) => void;
 }
 
-function ItemCard({ item, isWatched, onMarkWatched }: ItemCardProps) {
+function ItemCard({ item }: ItemCardProps) {
+  const user = useAuthUser();
+  const queryClient = useQueryClient();
   const [marking, setMarking] = useState(false);
-  const [localWatched, setLocalWatched] = useState(isWatched ?? false);
+  const [localWatched, setLocalWatched] = useState(item.is_watched);
 
   const isTv = item.type === "tv";
   const contentPath = isTv
@@ -195,11 +196,9 @@ function ItemCard({ item, isWatched, onMarkWatched }: ItemCardProps) {
         { method: "POST" },
       );
       setLocalWatched(true);
-      onMarkWatched?.(
-        tvItem.showData.id,
-        tvItem.season_number,
-        tvItem.episode_number,
-      );
+      if (user) {
+        queryClient.invalidateQueries({ queryKey: calendarQueryKey(user.uid) });
+      }
     } catch {
       // ignore
     } finally {
@@ -320,11 +319,7 @@ function ItemCard({ item, isWatched, onMarkWatched }: ItemCardProps) {
   );
 }
 
-export default function DayScheduleView({
-  items,
-  watchedEpisodeKeys,
-  onMarkWatched,
-}: Props) {
+export default function DayScheduleView({ items }: Props) {
   if (items.length === 0) {
     return (
       <p className="text-neutral-500 italic">Nothing scheduled for this day.</p>
@@ -367,24 +362,12 @@ export default function DayScheduleView({
     return `movie_${item.showData.id}`;
   }
 
-  function isWatched(item: CalendarItem): boolean {
-    if (item.type !== "tv" || !watchedEpisodeKeys) return false;
-    return watchedEpisodeKeys.has(
-      `${item.showData.id}_${item.season_number}_${item.episode_number}`,
-    );
-  }
-
   return (
     <div className="flex flex-col gap-6">
       {allDayItems.length > 0 && (
         <div className="flex flex-col gap-3">
           {allDayItems.map((item) => (
-            <ItemCard
-              key={itemKey(item)}
-              item={item}
-              isWatched={isWatched(item)}
-              onMarkWatched={onMarkWatched}
-            />
+            <ItemCard key={itemKey(item)} item={item} />
           ))}
         </div>
       )}
@@ -399,12 +382,7 @@ export default function DayScheduleView({
           </div>
           <div className="flex flex-col gap-3">
             {groupItems.map((item) => (
-              <ItemCard
-                key={itemKey(item)}
-                item={item}
-                isWatched={isWatched(item)}
-                onMarkWatched={onMarkWatched}
-              />
+              <ItemCard key={itemKey(item)} item={item} />
             ))}
           </div>
         </div>
