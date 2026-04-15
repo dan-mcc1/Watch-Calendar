@@ -152,7 +152,7 @@ export default function RecommendButton({
                 <h2 className="text-white font-bold text-lg mb-1">
                   Recommend to a friend
                 </h2>
-                <p className="text-neutral-400 text-sm mb-4 line-clamp-1">
+                <p className="text-neutral-200 text-base sm:text-lg font-semibold mb-4 line-clamp-2">
                   {contentTitle}
                 </p>
 

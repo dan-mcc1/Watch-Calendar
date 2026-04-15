@@ -23,6 +23,8 @@ interface WatchButtonProps {
   onStatusChange?: (status: WatchStatus) => void;
   /** Increment to silently re-fetch status in the background (no loading spinner). */
   refreshKey?: number;
+  /** Icon-only mode with tighter padding — use in space-constrained rows. */
+  compact?: boolean;
 }
 
 // ── Icons ──────────────────────────────────────────────────────────────────
@@ -123,6 +125,7 @@ export default function WatchButton({
   initialRating,
   onStatusChange,
   refreshKey,
+  compact = false,
 }: WatchButtonProps) {
   const user = useAuthUser();
   const queryClient = useQueryClient();
@@ -342,10 +345,14 @@ export default function WatchButton({
               ? updateWatchStatus("Want To Watch")
               : setMenuOpen((o) => !o)
           }
-          className={`flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-l-xl transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed ${mainClass}`}
+          className={`flex items-center gap-2 ${compact ? "px-2.5 sm:px-4 py-2" : "px-4 py-2"} text-sm font-semibold rounded-l-xl transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed ${mainClass}`}
         >
           {saving || statusLoading ? <IconSpinner /> : icon}
-          {statusLoading ? "Loading…" : saving ? "Saving…" : label}
+          {compact ? (
+            <span className="hidden sm:inline">{statusLoading ? "Loading…" : saving ? "Saving…" : label}</span>
+          ) : (
+            statusLoading ? "Loading…" : saving ? "Saving…" : label
+          )}
         </button>
 
         {/* Chevron dropdown toggle */}
@@ -364,7 +371,7 @@ export default function WatchButton({
 
         {/* Dropdown menu */}
         {menuOpen && (
-          <div className="absolute left-0 top-full mt-2 w-52 bg-neutral-800 border border-neutral-700 rounded-xl shadow-2xl shadow-black/60 z-30 overflow-hidden">
+          <div className={`absolute top-full mt-2 w-52 bg-neutral-800 border border-neutral-700 rounded-xl shadow-2xl shadow-black/60 z-30 overflow-hidden ${compact ? "right-0 sm:right-auto sm:left-0" : "left-0"}`}>
             {watchStatus !== "Want To Watch" && (
               <button
                 onClick={() => updateWatchStatus("Want To Watch")}

@@ -89,7 +89,10 @@ function NavDropdown({
           />
         </svg>
       </MenuButton>
-      <MenuItems modal={false} className="absolute left-0 z-20 mt-1 w-44 origin-top-left rounded-lg bg-neutral-800 border border-white/10 py-1 shadow-xl transition data-closed:scale-95 data-closed:opacity-0 data-enter:duration-100 data-enter:ease-out data-leave:duration-75 data-leave:ease-in">
+      <MenuItems
+        modal={false}
+        className="absolute left-0 z-20 mt-1 w-44 origin-top-left rounded-lg bg-neutral-800 border border-white/10 py-1 shadow-xl transition data-closed:scale-95 data-closed:opacity-0 data-enter:duration-100 data-enter:ease-out data-leave:duration-75 data-leave:ease-in"
+      >
         {links.map((link) => {
           const badge = badges?.[link.href] ?? 0;
           return (
@@ -737,8 +740,8 @@ export default function NavBar() {
               {discoverLinks.map((item) => (
                 <DisclosureButton
                   key={item.name}
-                  as="a"
-                  href={item.href}
+                  as={Link}
+                  to={item.href}
                   className={classNames(
                     location.pathname === item.href
                       ? "bg-neutral-950/50 text-white"
@@ -795,8 +798,8 @@ export default function NavBar() {
                     return (
                       <DisclosureButton
                         key={item.name}
-                        as="a"
-                        href={item.href}
+                        as={Link}
+                        to={item.href}
                         className={classNames(
                           location.pathname === item.href
                             ? "bg-neutral-950/50 text-white"
@@ -809,19 +812,6 @@ export default function NavBar() {
                       </DisclosureButton>
                     );
                   })}
-                  <DisclosureButton
-                    as="a"
-                    href="/profile"
-                    className={classNames(
-                      location.pathname === "/profile"
-                        ? "bg-neutral-950/50 text-white"
-                        : "text-neutral-300 hover:bg-white/5 hover:text-white",
-                      "flex items-center justify-between rounded-md px-3 py-2 text-sm font-medium",
-                    )}
-                  >
-                    Profile
-                    {pendingRequests > 0 && <Badge count={pendingRequests} />}
-                  </DisclosureButton>
                 </div>
               )}
             </>

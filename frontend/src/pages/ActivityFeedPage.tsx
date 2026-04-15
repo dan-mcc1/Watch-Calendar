@@ -172,14 +172,11 @@ function ActivityRow({
       {!isMe && statusMap[`${item.content_type}:${item.content_id}`] !== undefined && (
         <div className="flex-shrink-0 self-center">
           <WatchButton
+            compact
             contentType={item.content_type}
             contentId={item.content_id}
-            initialStatus={
-              statusMap[`${item.content_type}:${item.content_id}`]!.status
-            }
-            initialRating={
-              statusMap[`${item.content_type}:${item.content_id}`]!.rating
-            }
+            initialStatus={statusMap[`${item.content_type}:${item.content_id}`]!.status}
+            initialRating={statusMap[`${item.content_type}:${item.content_id}`]!.rating}
           />
         </div>
       )}
@@ -293,17 +290,12 @@ function RecommendationRow({
       {statusMap[`${item.content_type}:${item.content_id}`] !== undefined && (
         <div className="flex-shrink-0 self-center">
           <WatchButton
+            compact
             contentType={item.content_type}
             contentId={item.content_id}
-            initialStatus={
-              statusMap[`${item.content_type}:${item.content_id}`]!.status
-            }
-            initialRating={
-              statusMap[`${item.content_type}:${item.content_id}`]!.rating
-            }
-            onStatusChange={(status) => {
-              if (status !== "none") handleRead();
-            }}
+            initialStatus={statusMap[`${item.content_type}:${item.content_id}`]!.status}
+            initialRating={statusMap[`${item.content_type}:${item.content_id}`]!.rating}
+            onStatusChange={(status) => { if (status !== "none") handleRead(); }}
           />
         </div>
       )}
