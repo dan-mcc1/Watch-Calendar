@@ -1,11 +1,13 @@
 import asyncio
+import time
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
-from fastapi import FastAPI, Header, HTTPException
+from fastapi import FastAPI, Header, HTTPException, Request
 from slowapi.errors import RateLimitExceeded
 from slowapi import _rate_limit_exceeded_handler
 from app.core.limiter import limiter
+from app.core.logging import setup_logging, request_elapsed_ms
 from app.config import settings
 from app.routers import (
     tv,
@@ -44,7 +46,6 @@ from app.services.episode_service import (
     refresh_episodes_for_active_shows,
     check_and_reactivate_watched_shows,
 )
-
 
 async def _activity_cleanup_loop():
     """Delete activity and old recommendations, runs every hour."""
@@ -172,6 +173,17 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="ReleaseRadar API", lifespan=lifespan)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+setup_logging()
+
+
+@app.middleware("http")
+async def log_request_time(request: Request, call_next):
+    start = time.perf_counter()
+    response = await call_next(request)
+    request_elapsed_ms.set((time.perf_counter() - start) * 1000)
+    return response
+
 
 app.add_middleware(
     TrustedHostMiddleware,
