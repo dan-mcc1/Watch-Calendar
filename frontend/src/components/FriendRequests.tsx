@@ -51,6 +51,8 @@ export default function FriendRequests({
       });
       if (res.ok) {
         window.dispatchEvent(new CustomEvent("friend-request-handled"));
+        window.dispatchEvent(new CustomEvent("friends-updated"));
+        if (accept) window.dispatchEvent(new CustomEvent("activity-updated"));
         onResponded(friendshipId, accept, req);
       }
     } finally {
@@ -62,6 +64,7 @@ export default function FriendRequests({
     setCancelling(friendshipId);
     try {
       await apiFetch(`/friends/cancel/${friendshipId}`, { method: "DELETE" });
+      window.dispatchEvent(new CustomEvent("friends-updated"));
       onCancelled(friendshipId);
     } finally {
       setCancelling(null);

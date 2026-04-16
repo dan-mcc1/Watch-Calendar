@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { BASE_IMAGE_URL } from "../constants";
 import { Link } from "react-router-dom";
 import { useAuthUser } from "../hooks/useAuthUser";
 import { apiFetch } from "../utils/apiFetch";
+import { useEventRefetch } from "../hooks/useEventRefetch";
 
 interface ActivityItem {
   id: number;
@@ -38,7 +39,7 @@ export default function ActivityFeed() {
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
 
-  useEffect(() => {
+  const fetchActivity = useCallback(() => {
     if (!user) { setLoading(false); return; }
     apiFetch("/friends/activity")
       .then((res) => { if (res.ok) return res.json(); })
@@ -46,6 +47,13 @@ export default function ActivityFeed() {
       .catch(console.error)
       .finally(() => setLoading(false));
   }, [user]);
+
+  useEffect(() => {
+    setLoading(true);
+    fetchActivity();
+  }, [fetchActivity]);
+
+  useEventRefetch("activity-updated", fetchActivity);
 
   if (loading || items.length === 0) return null;
 

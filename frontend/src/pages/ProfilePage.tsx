@@ -223,10 +223,10 @@ export default function ProfilePage() {
     if (user) fetchAll(user.uid);
   }, [user, fetchAll]);
 
-  // Refresh friend requests when a new one arrives via SSE (NavBar broadcasts this event)
+  // Refresh friend data whenever any friends-related mutation fires
   useEffect(() => {
-    window.addEventListener("friend-request-received", fetchFriends);
-    return () => window.removeEventListener("friend-request-received", fetchFriends);
+    window.addEventListener("friends-updated", fetchFriends);
+    return () => window.removeEventListener("friends-updated", fetchFriends);
   }, []);
 
   if (!user) {

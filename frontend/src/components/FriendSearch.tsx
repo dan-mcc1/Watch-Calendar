@@ -67,6 +67,7 @@ export default function FriendSearch({
         } else {
           setSentTo((prev) => new Set(prev).add(user.username));
         }
+        window.dispatchEvent(new CustomEvent("friends-updated"));
         onRequestSent();
       } else {
         const data = await res.json().catch(() => ({}));

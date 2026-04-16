@@ -16,8 +16,6 @@ import { auth } from "../firebase";
 import { API_URL, BASE_IMAGE_URL, getAvatarColor } from "../constants";
 import { apiFetch } from "../utils/apiFetch";
 
-const NAV_BAR_REFRESH_TIME = 30; // amount of time between each GET for recommendations and friend requests
-
 interface SearchResult {
   id: number;
   media_type: "movie" | "tv" | "person";
@@ -132,7 +130,6 @@ export default function NavBar() {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [dropdownLoading, setDropdownLoading] = useState(false);
   const esRef = useRef<EventSource | null>(null);
-  const lastCountsFetchRef = useRef<number>(0);
   const searchContainerRef = useRef<HTMLDivElement>(null);
   const dropdownTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const dropdownAbortRef = useRef<AbortController | null>(null);
@@ -256,6 +253,64 @@ export default function NavBar() {
     }
   }, []);
 
+  // Opens a fresh SSE connection for the currently signed-in user.
+  // Extracted so it can be called both on login/token-refresh and on reconnect.
+  const connectSSE = useCallback(async () => {
+    if (esRef.current?.readyState === EventSource.OPEN) return;
+    esRef.current?.close();
+    esRef.current = null;
+
+    if (!auth.currentUser) return;
+
+    // EventSource can't send custom headers, so we exchange the Firebase token
+    // for a short-lived (60s) single-use session token first, then use that
+    // in the URL so the long-lived credential never appears in logs or history.
+    const tokenRes = await apiFetch("/events/token", { method: "POST" });
+    if (!tokenRes.ok) return;
+    const { session_token } = await tokenRes.json();
+    const es = new EventSource(
+      `${API_URL}/events/stream?token=${encodeURIComponent(session_token)}`,
+    );
+    esRef.current = es;
+
+    es.onmessage = (e) => {
+      try {
+        const data: {
+          type: string;
+          pending_requests?: number;
+          unread_recs?: number;
+        } = JSON.parse(e.data);
+        if (data.type === "counts_update") {
+          if (data.pending_requests !== undefined) {
+            setPendingRequests(data.pending_requests);
+            window.dispatchEvent(new CustomEvent("friends-updated"));
+          }
+          if (data.unread_recs !== undefined) {
+            setUnreadRecs(data.unread_recs);
+            window.dispatchEvent(new CustomEvent("recommendations-updated"));
+          }
+        }
+      } catch {
+        // ignore malformed events
+      }
+    };
+
+    let retryDelay = 2000;
+
+    es.onerror = () => {
+      esRef.current?.close();
+      esRef.current = null;
+
+      fetchCounts().catch(() => {});
+
+      setTimeout(() => {
+        connectSSE();
+      }, retryDelay);
+
+      retryDelay = Math.min(retryDelay * 2, 30000); // cap at 30s
+    };
+  }, [fetchCounts]);
+
   // onIdTokenChanged fires on login, logout, and token refresh (~every hour).
   // We close and reopen the SSE connection each time so the token stays valid.
   useEffect(() => {
@@ -273,61 +328,14 @@ export default function NavBar() {
       setUser(currentUser);
       fetchCounts();
       fetchAvatar();
-
-      // EventSource can't send custom headers, so we exchange the Firebase token
-      // for a short-lived (60s) single-use session token first, then use that
-      // in the URL so the long-lived credential never appears in logs or history.
-      const tokenRes = await apiFetch("/events/token", { method: "POST" });
-      if (!tokenRes.ok) return;
-      const { session_token } = await tokenRes.json();
-      const es = new EventSource(
-        `${API_URL}/events/stream?token=${encodeURIComponent(session_token)}`,
-      );
-      esRef.current = es;
-      es.onmessage = (e) => {
-        try {
-          const data: { type: string } = JSON.parse(e.data);
-          if (data.type === "friend_request") {
-            setPendingRequests((n) => n + 1);
-            window.dispatchEvent(new CustomEvent("friend-request-received"));
-          }
-          if (data.type === "recommendation") {
-            setUnreadRecs((n) => n + 1);
-            window.dispatchEvent(new CustomEvent("recommendation-received"));
-          }
-        } catch {
-          // ignore malformed events
-        }
-      };
+      connectSSE();
     });
 
     return () => {
       unsubscribe();
       esRef.current?.close();
     };
-  }, [fetchCounts]);
-
-  // Re-sync counts on navigation, throttled to at most once every 30 s
-  // useEffect(() => {
-  //   const currentUser = auth.currentUser;
-  //   if (!currentUser) return;
-  //   const now = Date.now();
-  //   if (now - lastCountsFetchRef.current < 30_000) return;
-  //   lastCountsFetchRef.current = now;
-  //   currentUser
-  //     .getIdToken()
-  //     .then(fetchCounts)
-  //     .catch(() => {});
-  // }, [location.pathname, fetchCounts]);
-  useEffect(() => {
-    if (!auth.currentUser) return;
-
-    const interval = setInterval(() => {
-      fetchCounts().catch(() => {});
-    }, NAV_BAR_REFRESH_TIME * 1000); // every 30s
-
-    return () => clearInterval(interval);
-  }, [fetchCounts]);
+  }, [fetchCounts, fetchAvatar, connectSSE]);
 
   // Decrement immediately when a recommendation is marked read on the same page
   useEffect(() => {

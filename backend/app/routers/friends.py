@@ -14,6 +14,8 @@ from app.services.activity_service import (
 )
 from app.core.event_bus import publish
 from app.models.user import User
+from app.models.friendship import Friendship
+from app.services.recommendation_service import get_unread_count
 
 router = APIRouter()
 
@@ -50,7 +52,17 @@ def send_request(
     result = friends_service.send_friend_request(db, uid, addressee_username)
     addressee = db.query(User).filter(User.username == addressee_username).first()
     if addressee:
-        publish(addressee.id, "friend_request")
+        pending_count = (
+            db.query(Friendship)
+            .filter(Friendship.addressee_id == addressee.id, Friendship.status == "pending")
+            .count()
+        )
+        unread_count = get_unread_count(db, addressee.id)
+        publish(addressee.id, {
+            "type": "counts_update",
+            "pending_requests": pending_count,
+            "unread_recs": unread_count,
+        })
     return result
 
 
@@ -62,7 +74,19 @@ def respond_to_request(
     uid: str = Depends(get_current_user),
 ):
     """Accept or decline an incoming friend request."""
-    return friends_service.respond_to_request(db, uid, friendship_id, accept)
+    result = friends_service.respond_to_request(db, uid, friendship_id, accept)
+    pending_count = (
+        db.query(Friendship)
+        .filter(Friendship.addressee_id == uid, Friendship.status == "pending")
+        .count()
+    )
+    unread_count = get_unread_count(db, uid)
+    publish(uid, {
+        "type": "counts_update",
+        "pending_requests": pending_count,
+        "unread_recs": unread_count,
+    })
+    return result
 
 
 @router.delete("/cancel/{friendship_id}")

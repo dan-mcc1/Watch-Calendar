@@ -11,6 +11,7 @@ from app.services.recommendation_service import (
 )
 from app.services.email_service import send_recommendation_email
 from app.core.event_bus import publish
+from app.models.friendship import Friendship
 from app.services.for_you_service import get_for_you_recommendations
 from app.core.limiter import limiter
 
@@ -56,7 +57,17 @@ def send(
         content_poster_path,
         message,
     )
-    publish(result.recipient_id, "recommendation")
+    pending_count = (
+        db.query(Friendship)
+        .filter(Friendship.addressee_id == result.recipient_id, Friendship.status == "pending")
+        .count()
+    )
+    unread_count = get_unread_count(db, result.recipient_id)
+    publish(result.recipient_id, {
+        "type": "counts_update",
+        "pending_requests": pending_count,
+        "unread_recs": unread_count,
+    })
     if result._email_params:
         background_tasks.add_task(send_recommendation_email, **result._email_params)
     return result
@@ -84,7 +95,19 @@ def read(
     db: Session = Depends(get_db),
     uid: str = Depends(get_current_user),
 ):
-    return mark_read(db, uid, recommendation_id)
+    result = mark_read(db, uid, recommendation_id)
+    pending_count = (
+        db.query(Friendship)
+        .filter(Friendship.addressee_id == uid, Friendship.status == "pending")
+        .count()
+    )
+    unread_count = get_unread_count(db, uid)
+    publish(uid, {
+        "type": "counts_update",
+        "pending_requests": pending_count,
+        "unread_recs": unread_count,
+    })
+    return result
 
 
 @router.delete("/{recommendation_id}")

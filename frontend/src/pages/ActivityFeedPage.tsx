@@ -169,17 +169,22 @@ function ActivityRow({
         </div>
       </div>
 
-      {!isMe && statusMap[`${item.content_type}:${item.content_id}`] !== undefined && (
-        <div className="flex-shrink-0 self-center">
-          <WatchButton
-            compact
-            contentType={item.content_type}
-            contentId={item.content_id}
-            initialStatus={statusMap[`${item.content_type}:${item.content_id}`]!.status}
-            initialRating={statusMap[`${item.content_type}:${item.content_id}`]!.rating}
-          />
-        </div>
-      )}
+      {!isMe &&
+        statusMap[`${item.content_type}:${item.content_id}`] !== undefined && (
+          <div className="flex-shrink-0 self-center">
+            <WatchButton
+              compact
+              contentType={item.content_type}
+              contentId={item.content_id}
+              initialStatus={
+                statusMap[`${item.content_type}:${item.content_id}`]!.status
+              }
+              initialRating={
+                statusMap[`${item.content_type}:${item.content_id}`]!.rating
+              }
+            />
+          </div>
+        )}
     </div>
   );
 }
@@ -293,9 +298,15 @@ function RecommendationRow({
             compact
             contentType={item.content_type}
             contentId={item.content_id}
-            initialStatus={statusMap[`${item.content_type}:${item.content_id}`]!.status}
-            initialRating={statusMap[`${item.content_type}:${item.content_id}`]!.rating}
-            onStatusChange={(status) => { if (status !== "none") handleRead(); }}
+            initialStatus={
+              statusMap[`${item.content_type}:${item.content_id}`]!.status
+            }
+            initialRating={
+              statusMap[`${item.content_type}:${item.content_id}`]!.rating
+            }
+            onStatusChange={(status) => {
+              if (status !== "none") handleRead();
+            }}
           />
         </div>
       )}
@@ -349,7 +360,10 @@ export default function ActivityFeedPage() {
 
   // Bulk-fetch watch statuses for all tabs
   useEffect(() => {
-    if (!currentUserId || (!myItems.length && !friendItems.length && !recommendations.length)) {
+    if (
+      !currentUserId ||
+      (!myItems.length && !friendItems.length && !recommendations.length)
+    ) {
       return;
     }
     if (!user) return;
@@ -378,7 +392,7 @@ export default function ActivityFeedPage() {
       .catch(() => setStatusMap(cached as StatusMap));
   }, [myItems, friendItems, recommendations, currentUserId]);
 
-  // Refetch recommendations inbox when a new one arrives via SSE
+  // Refetch recommendations inbox when any rec mutation fires
   useEffect(() => {
     async function handler() {
       try {
@@ -388,23 +402,24 @@ export default function ActivityFeedPage() {
         // non-critical
       }
     }
-    window.addEventListener("recommendation-received", handler);
-    return () => window.removeEventListener("recommendation-received", handler);
+    window.addEventListener("recommendations-updated", handler);
+    return () => window.removeEventListener("recommendations-updated", handler);
   }, []);
 
   async function markRead(id: number) {
     setRecommendations((prev) =>
       prev.map((r) => (r.id === id ? { ...r, is_read: true } : r)),
     );
+
     try {
-      const res = await apiFetch(`/recommendations/${id}/read`, { method: "PATCH" });
-      if (res.ok) {
-        window.dispatchEvent(new CustomEvent("rec-marked-read"));
-      } else {
-        setRecommendations((prev) =>
-          prev.map((r) => (r.id === id ? { ...r, is_read: false } : r)),
-        );
-      }
+      const res = await apiFetch(`/recommendations/${id}/read`, {
+        method: "PATCH",
+      });
+
+      if (!res.ok) throw new Error();
+
+      window.dispatchEvent(new CustomEvent("rec-marked-read"));
+      window.dispatchEvent(new CustomEvent("recommendations-updated"));
     } catch {
       setRecommendations((prev) =>
         prev.map((r) => (r.id === id ? { ...r, is_read: false } : r)),
@@ -415,7 +430,14 @@ export default function ActivityFeedPage() {
   async function deleteRec(id: number) {
     setRecommendations((prev) => prev.filter((r) => r.id !== id));
     try {
-      await apiFetch(`/recommendations/${id}`, { method: "DELETE" });
+      const res = await apiFetch(`/recommendations/${id}`, {
+        method: "DELETE",
+      });
+
+      if (!res.ok) throw new Error();
+
+      window.dispatchEvent(new CustomEvent("rec-marked-read"));
+      window.dispatchEvent(new CustomEvent("recommendations-updated"));
     } catch {
       // non-critical, item already removed from UI
     }
