@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "./queryKeys";
 import { queryFetch } from "./queryFetch";
 import { apiFetch } from "../../utils/apiFetch";
+import { useAuthUser } from "../useAuthUser";
 import type { AggregateRating, ExternalScores } from "../../types/media";
 
 interface Review {
@@ -36,13 +37,14 @@ export function useAggregateRating(contentType: string, id: string) {
 }
 
 export function useExternalScores(imdbId: string | undefined) {
+  const user = useAuthUser();
   return useQuery({
     queryKey: queryKeys.externalScores(imdbId ?? ""),
     queryFn: () =>
       queryFetch<ExternalScores>(
         `/reviews/external-scores?imdb_id=${encodeURIComponent(imdbId!)}`,
       ),
-    enabled: !!imdbId,
+    enabled: !!imdbId && !!user,
   });
 }
 
