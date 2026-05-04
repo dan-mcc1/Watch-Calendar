@@ -145,6 +145,61 @@ class TestPublicProfile:
         assert "watchlist" in data
 
 
+class TestProfileSummary:
+    def test_profile_summary_shape(self, client, seed_users):
+        r = client.get("/user/profile-summary")
+        assert r.status_code == 200
+        data = r.json()
+        assert "user" in data
+        assert "favorites" in data
+        assert "watchlist" in data
+        assert "watched" in data
+        assert "friends" in data
+        assert "incoming_requests" in data
+        assert "outgoing_requests" in data
+        assert "followers" in data
+
+    def test_profile_summary_watchlist_has_counts(self, client, seed_users):
+        r = client.get("/user/profile-summary")
+        data = r.json()
+        assert "total_movies" in data["watchlist"]
+        assert "total_shows" in data["watchlist"]
+        assert "total_movies" in data["watched"]
+        assert "total_shows" in data["watched"]
+
+    def test_profile_summary_counts_reflect_data(self, client, db, seed_users, seed_movie):
+        from app.models.watchlist import Watchlist
+        from datetime import datetime
+        db.add(Watchlist(user_id="test-uid-1", content_type="movie", content_id=550, added_at=datetime.utcnow()))
+        db.commit()
+        r = client.get("/user/profile-summary")
+        data = r.json()
+        assert data["watchlist"]["total_movies"] == 1
+        assert len(data["watchlist"]["movies"]) == 1
+
+    def test_profile_summary_preview_capped_at_five(self, client, db, seed_users):
+        from app.models.movie import Movie
+        from app.models.watchlist import Watchlist
+        from datetime import datetime
+        for i in range(1, 8):
+            db.add(Movie(id=i, title=f"Movie {i}", tracking_count=1))
+        db.flush()
+        for i in range(1, 8):
+            db.add(Watchlist(user_id="test-uid-1", content_type="movie", content_id=i, added_at=datetime.utcnow()))
+        db.commit()
+        r = client.get("/user/profile-summary")
+        data = r.json()
+        assert data["watchlist"]["total_movies"] == 7
+        assert len(data["watchlist"]["movies"]) == 5
+
+    def test_profile_summary_requires_auth(self):
+        from fastapi.testclient import TestClient
+        from app.main import app
+        c = TestClient(app, raise_server_exceptions=False)
+        r = c.get("/user/profile-summary")
+        assert r.status_code in (400, 401, 403, 422)
+
+
 class TestAccountDelete:
     def test_delete_account(self, client, seed_users):
         r = client.delete("/user/account")

@@ -1,5 +1,4 @@
-import { useEffect, useState } from "react";
-import { apiFetch } from "../utils/apiFetch";
+import { useUserStats } from "../hooks/api/useUser";
 import {
   BarChart,
   Bar,
@@ -64,18 +63,10 @@ function StatCard({
 }
 
 export default function StatsSection() {
-  const [stats, setStats] = useState<Stats | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { data, isLoading } = useUserStats();
+  const stats = data as Stats | undefined;
 
-  useEffect(() => {
-    apiFetch("/user/stats")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data) => setStats(data))
-      .catch(() => setStats(null))
-      .finally(() => setLoading(false));
-  }, []);
-
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="bg-neutral-800 rounded-lg p-4">
         <h2 className="text-lg font-semibold mb-4 text-white">Stats</h2>

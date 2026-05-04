@@ -68,6 +68,13 @@ function mergeShows(
   return Array.from(showMap.values());
 }
 
+function mergeMovies(existing: Movie[], incoming: Movie[]): Movie[] {
+  const map = new Map<number, Movie>();
+  for (const m of existing) map.set(m.id, m);
+  for (const m of incoming) map.set(m.id, m);
+  return Array.from(map.values());
+}
+
 export function calendarQueryKey(uid: string) {
   return ["calendar", uid] as const;
 }
@@ -150,7 +157,7 @@ export function useCalendarData() {
         calendarQueryKey(user.uid),
         (prev) => ({
           shows: mergeShows(prev?.shows ?? [], chunk.shows),
-          movies: chunk.movies,
+          movies: mergeMovies(prev?.movies ?? [], chunk.movies),
         }),
       );
 

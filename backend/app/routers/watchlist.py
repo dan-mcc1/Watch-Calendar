@@ -1,5 +1,5 @@
-from fastapi import APIRouter, Depends, Body, HTTPException, Request, Query
-from sqlalchemy import tuple_
+from fastapi import APIRouter, BackgroundTasks, Depends, Body, HTTPException, Request, Query
+from sqlalchemy import tuple_, union_all, select, literal, null, Float
 from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.services.watchlist_service import (
@@ -15,22 +15,27 @@ from app.models.watched import Watched
 from app.models.currently_watching import CurrentlyWatching
 from app.dependencies.auth import get_current_user
 from app.core.limiter import limiter
+from app.services.episode_service import sync_show_episodes_background
 
 router = APIRouter()
 
 
 @router.post("/add")
 def add_item(
+    background_tasks: BackgroundTasks,
     content_type: str = Body(...),
     content_id: int = Body(...),
     db: Session = Depends(get_db),
-    uid: str = Depends(get_current_user),  # secure current user
+    uid: str = Depends(get_current_user),
 ):
     if content_type not in ("movie", "tv"):
         raise HTTPException(
             status_code=400, detail="content_type must be 'movie' or 'tv'"
         )
-    return add_to_watchlist(db, uid, content_type, content_id)
+    result = add_to_watchlist(db, uid, content_type, content_id)
+    if content_type == "tv":
+        background_tasks.add_task(sync_show_episodes_background, content_id)
+    return result
 
 
 @router.delete("/remove")
@@ -47,7 +52,7 @@ def remove_item(
     return remove_from_watchlist(db, uid, content_type, content_id)
 
 
-@router.get("/")
+@router.get("")
 def get_user_watchlist(
     db: Session = Depends(get_db),
     uid: str = Depends(get_current_user),
@@ -98,44 +103,44 @@ def bulk_status(
         items = items[:500]
     pairs = [(i["content_type"], i["content_id"]) for i in items]
 
-    cw_rows = (
-        db.query(CurrentlyWatching.content_type, CurrentlyWatching.content_id)
-        .filter(
-            CurrentlyWatching.user_id == uid,
-            tuple_(CurrentlyWatching.content_type, CurrentlyWatching.content_id).in_(
-                pairs
-            ),
-        )
-        .all()
+    # Single UNION ALL — one DB round-trip instead of three.
+    # Priority (highest wins): Currently Watching > Want To Watch > Watched.
+    cw_q = select(
+        literal("Currently Watching").label("status"),
+        CurrentlyWatching.content_type,
+        CurrentlyWatching.content_id,
+        null().cast(Float).label("rating"),
+    ).where(
+        CurrentlyWatching.user_id == uid,
+        tuple_(CurrentlyWatching.content_type, CurrentlyWatching.content_id).in_(pairs),
+    )
+    wl_q = select(
+        literal("Want To Watch").label("status"),
+        Watchlist.content_type,
+        Watchlist.content_id,
+        null().cast(Float).label("rating"),
+    ).where(
+        Watchlist.user_id == uid,
+        tuple_(Watchlist.content_type, Watchlist.content_id).in_(pairs),
+    )
+    wd_q = select(
+        literal("Watched").label("status"),
+        Watched.content_type,
+        Watched.content_id,
+        Watched.rating,
+    ).where(
+        Watched.user_id == uid,
+        tuple_(Watched.content_type, Watched.content_id).in_(pairs),
     )
 
-    wl_rows = (
-        db.query(Watchlist.content_type, Watchlist.content_id)
-        .filter(
-            Watchlist.user_id == uid,
-            tuple_(Watchlist.content_type, Watchlist.content_id).in_(pairs),
-        )
-        .all()
-    )
+    rows = db.execute(union_all(cw_q, wl_q, wd_q)).all()
 
-    wd_rows = (
-        db.query(Watched.content_type, Watched.content_id, Watched.rating)
-        .filter(
-            Watched.user_id == uid,
-            tuple_(Watched.content_type, Watched.content_id).in_(pairs),
-        )
-        .all()
-    )
-
-    # Start with "none" for everything, then apply in ascending priority
-    # so higher-priority statuses overwrite lower ones
+    _PRIORITY = {"Watched": 1, "Want To Watch": 2, "Currently Watching": 3}
     result = {f"{ct}:{cid}": {"status": "none", "rating": None} for ct, cid in pairs}
-    for ct, cid, rating in wd_rows:
-        result[f"{ct}:{cid}"] = {"status": "Watched", "rating": rating}
-    for ct, cid in wl_rows:
-        result[f"{ct}:{cid}"] = {"status": "Want To Watch", "rating": None}
-    for ct, cid in cw_rows:
-        result[f"{ct}:{cid}"] = {"status": "Currently Watching", "rating": None}
+    for status, ct, cid, rating in rows:
+        key = f"{ct}:{cid}"
+        if _PRIORITY.get(status, 0) > _PRIORITY.get(result[key]["status"], 0):
+            result[key] = {"status": status, "rating": rating}
 
     return result
 

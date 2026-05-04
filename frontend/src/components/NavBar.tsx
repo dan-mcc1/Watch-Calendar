@@ -12,9 +12,12 @@ import { Bars3Icon, XMarkIcon } from "@heroicons/react/24/outline";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useLocation, Link, useNavigate } from "react-router-dom";
 import { onIdTokenChanged, signOut } from "firebase/auth";
+import { useQueryClient } from "@tanstack/react-query";
 import { auth } from "../firebase";
 import { API_URL, BASE_IMAGE_URL, getAvatarColor } from "../constants";
 import { apiFetch } from "../utils/apiFetch";
+import { useNavCounts, useNavAvatar } from "../hooks/api/useNavCounts";
+import { queryKeys } from "../hooks/api/queryKeys";
 
 interface SearchResult {
   id: number;
@@ -118,14 +121,12 @@ function NavDropdown({
 export default function NavBar() {
   const location = useLocation();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [user, setUser] = useState(auth.currentUser);
   const [mobileDiscoverOpen, setMobileDiscoverOpen] = useState(false);
   const [mobileLibraryOpen, setMobileLibraryOpen] = useState(false);
   const mobileCloseRef = useRef<HTMLButtonElement>(null);
   const [searchQuery, setSearchQuery] = useState("");
-  const [pendingRequests, setPendingRequests] = useState(0);
-  const [unreadRecs, setUnreadRecs] = useState(0);
-  const [avatarKey, setAvatarKey] = useState<string | null>(null);
   const [dropdownResults, setDropdownResults] = useState<SearchResult[]>([]);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [dropdownLoading, setDropdownLoading] = useState(false);
@@ -133,6 +134,11 @@ export default function NavBar() {
   const searchContainerRef = useRef<HTMLDivElement>(null);
   const dropdownTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const dropdownAbortRef = useRef<AbortController | null>(null);
+
+  const { data: navCounts } = useNavCounts();
+  const { data: avatarKey } = useNavAvatar();
+  const pendingRequests = navCounts?.pendingRequests ?? 0;
+  const unreadRecs = navCounts?.unreadRecs ?? 0;
 
   function cancelPendingDropdown() {
     if (dropdownTimerRef.current) clearTimeout(dropdownTimerRef.current);
@@ -175,7 +181,6 @@ export default function NavBar() {
             shows: SearchResult[];
             people: SearchResult[];
           } = await res.json();
-          // Tag each with media_type then interleave: up to 3 shows, 2 movies, 1 person
           const shows = (data.shows ?? [])
             .slice(0, 3)
             .map((r) => ({ ...r, media_type: "tv" as const }));
@@ -222,49 +227,13 @@ export default function NavBar() {
     return () => document.removeEventListener("mousedown", handleClick);
   }, []);
 
-  const fetchCounts = useCallback(async () => {
-    try {
-      const [friendsRes, recsRes] = await Promise.all([
-        apiFetch("/friends/requests/incoming"),
-        apiFetch("/recommendations/unread-count"),
-      ]);
-      if (friendsRes.ok) {
-        const data: { friendship_id: number }[] = await friendsRes.json();
-        setPendingRequests(data.length);
-      }
-      if (recsRes.ok) {
-        const data: { count: number } = await recsRes.json();
-        setUnreadRecs(data.count);
-      }
-    } catch {
-      // non-critical — silently ignore
-    }
-  }, []);
-
-  const fetchAvatar = useCallback(async () => {
-    try {
-      const res = await apiFetch("/user/me");
-      if (res.ok) {
-        const data = await res.json();
-        setAvatarKey(data.avatar_key ?? null);
-      }
-    } catch {
-      // non-critical
-    }
-  }, []);
-
-  // Opens a fresh SSE connection for the currently signed-in user.
-  // Extracted so it can be called both on login/token-refresh and on reconnect.
-  const connectSSE = useCallback(async () => {
+  const connectSSE = useCallback(async (uid: string) => {
     if (esRef.current?.readyState === EventSource.OPEN) return;
     esRef.current?.close();
     esRef.current = null;
 
     if (!auth.currentUser) return;
 
-    // EventSource can't send custom headers, so we exchange the Firebase token
-    // for a short-lived (60s) single-use session token first, then use that
-    // in the URL so the long-lived credential never appears in logs or history.
     const tokenRes = await apiFetch("/events/token", { method: "POST" });
     if (!tokenRes.ok) return;
     const { session_token } = await tokenRes.json();
@@ -281,38 +250,31 @@ export default function NavBar() {
           unread_recs?: number;
         } = JSON.parse(e.data);
         if (data.type === "counts_update") {
-          if (data.pending_requests !== undefined) {
-            setPendingRequests(data.pending_requests);
-            window.dispatchEvent(new CustomEvent("friends-updated"));
-          }
-          if (data.unread_recs !== undefined) {
-            setUnreadRecs(data.unread_recs);
-            window.dispatchEvent(new CustomEvent("recommendations-updated"));
-          }
+          queryClient.setQueryData(
+            queryKeys.navCounts(uid),
+            (old: { pendingRequests: number; unreadRecs: number } | undefined) => ({
+              pendingRequests: data.pending_requests ?? old?.pendingRequests ?? 0,
+              unreadRecs: data.unread_recs ?? old?.unreadRecs ?? 0,
+            }),
+          );
         }
       } catch {
         // ignore malformed events
       }
     };
 
-    let retryDelay = 2000;
-
     es.onerror = () => {
       esRef.current?.close();
       esRef.current = null;
 
-      fetchCounts().catch(() => {});
+      queryClient.invalidateQueries({ queryKey: queryKeys.navCounts(uid) });
 
       setTimeout(() => {
-        connectSSE();
-      }, retryDelay);
-
-      retryDelay = Math.min(retryDelay * 2, 30000); // cap at 30s
+        connectSSE(uid);
+      }, 2000);
     };
-  }, [fetchCounts]);
+  }, [queryClient]);
 
-  // onIdTokenChanged fires on login, logout, and token refresh (~every hour).
-  // We close and reopen the SSE connection each time so the token stays valid.
   useEffect(() => {
     const unsubscribe = onIdTokenChanged(auth, async (currentUser) => {
       esRef.current?.close();
@@ -320,50 +282,20 @@ export default function NavBar() {
 
       if (!currentUser) {
         setUser(null);
-        setPendingRequests(0);
-        setUnreadRecs(0);
         return;
       }
 
       setUser(currentUser);
-      fetchCounts();
-      fetchAvatar();
-      connectSSE();
+      queryClient.invalidateQueries({ queryKey: queryKeys.navCounts(currentUser.uid) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.navAvatar(currentUser.uid) });
+      connectSSE(currentUser.uid);
     });
 
     return () => {
       unsubscribe();
       esRef.current?.close();
     };
-  }, [fetchCounts, fetchAvatar, connectSSE]);
-
-  // Decrement immediately when a recommendation is marked read on the same page
-  useEffect(() => {
-    function handler() {
-      setUnreadRecs((n) => Math.max(0, n - 1));
-    }
-    window.addEventListener("rec-marked-read", handler);
-    return () => window.removeEventListener("rec-marked-read", handler);
-  }, []);
-
-  // Re-fetch avatar when the user saves a new one from Settings
-  useEffect(() => {
-    function handler() {
-      if (!auth.currentUser) return;
-      fetchAvatar().catch(() => {});
-    }
-    window.addEventListener("avatar-updated", handler);
-    return () => window.removeEventListener("avatar-updated", handler);
-  }, [fetchAvatar]);
-
-  // Decrement immediately when a friend request is accepted or declined on the same page
-  useEffect(() => {
-    function handler() {
-      setPendingRequests((n) => Math.max(0, n - 1));
-    }
-    window.addEventListener("friend-request-handled", handler);
-    return () => window.removeEventListener("friend-request-handled", handler);
-  }, []);
+  }, [connectSSE, queryClient]);
 
   const libraryBadges: Record<string, number> = {
     "/activity": unreadRecs,
@@ -434,7 +366,6 @@ export default function NavBar() {
             </div>
 
             <div className="hidden lg:ml-6 lg:flex lg:items-center lg:gap-1">
-              {/* Calendar */}
               <Link
                 to="/calendar"
                 className={classNames(
@@ -447,14 +378,12 @@ export default function NavBar() {
                 Calendar
               </Link>
 
-              {/* Discover dropdown */}
               <NavDropdown
                 label="Discover"
                 links={discoverLinks}
                 currentPath={location.pathname}
               />
 
-              {/* My Library dropdown — signed in only */}
               {user && (
                 <NavDropdown
                   label="My Library"
@@ -491,7 +420,6 @@ export default function NavBar() {
                 className="pl-10 w-56 py-1.5 rounded-md bg-primary-700 border border-primary-800/50 text-white text-sm placeholder-neutral-300 focus:outline-none focus:ring-2 focus:ring-neutral-950/50 transition"
               />
 
-              {/* Search dropdown */}
               {dropdownOpen && (
                 <div className="absolute top-full mt-1 right-0 w-72 bg-neutral-800 border border-white/10 rounded-lg shadow-xl z-50 overflow-hidden">
                   {dropdownLoading && dropdownResults.length === 0 ? (

@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useAuthUser } from "../hooks/useAuthUser";
-import { apiFetch } from "../utils/apiFetch";
+import { useFriends } from "../hooks/api/useFriends";
+import { useSendRecommendation } from "../hooks/api/useRecommendations";
 
 interface Friend {
   friendship_id: number;
@@ -22,14 +23,15 @@ export default function RecommendButton({
 }: RecommendButtonProps) {
   const user = useAuthUser();
   const [open, setOpen] = useState(false);
-  const [friends, setFriends] = useState<Friend[]>([]);
-  const [loadingFriends, setLoadingFriends] = useState(false);
-  const [selected, setSelected] = useState<string | null>(null); // username
+  const [selected, setSelected] = useState<string | null>(null);
   const [message, setMessage] = useState("");
-  const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const modalRef = useRef<HTMLDivElement>(null);
+
+  const { data: friendsData, isLoading: loadingFriends } = useFriends();
+  const friends = (friendsData as Friend[] | undefined) ?? [];
+  const sendMutation = useSendRecommendation();
 
   // Close on outside click
   useEffect(() => {
@@ -43,23 +45,12 @@ export default function RecommendButton({
     return () => document.removeEventListener("mousedown", handler);
   }, [open]);
 
-  async function handleOpen() {
+  function handleOpen() {
     setOpen(true);
     setSent(false);
     setError(null);
     setSelected(null);
     setMessage("");
-
-    if (!user) return;
-    setLoadingFriends(true);
-    try {
-      const res = await apiFetch("/friends/");
-      if (res.ok) setFriends(await res.json());
-    } catch {
-      setError("Could not load friends.");
-    } finally {
-      setLoadingFriends(false);
-    }
   }
 
   function handleClose() {
@@ -73,20 +64,15 @@ export default function RecommendButton({
   async function handleSend() {
     if (!selected) return;
     if (!user) return;
-    setSending(true);
     setError(null);
     try {
-      const res = await apiFetch("/recommendations/send", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          recipient_username: selected,
-          content_type: contentType,
-          content_id: contentId,
-          content_title: contentTitle,
-          content_poster_path: contentPosterPath,
-          message: message.trim() || null,
-        }),
+      const res = await sendMutation.mutateAsync({
+        recipient_username: selected,
+        content_type: contentType,
+        content_id: contentId,
+        content_title: contentTitle,
+        content_poster_path: contentPosterPath ?? "",
+        message: message.trim(),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
@@ -96,8 +82,6 @@ export default function RecommendButton({
       }
     } catch {
       setError("Network error.");
-    } finally {
-      setSending(false);
     }
   }
 
@@ -212,10 +196,10 @@ export default function RecommendButton({
                   </button>
                   <button
                     onClick={handleSend}
-                    disabled={!selected || sending}
+                    disabled={!selected || sendMutation.isPending}
                     className="px-5 py-2 bg-primary-600 hover:bg-primary-500 disabled:opacity-40 text-white text-sm font-semibold rounded-lg transition-colors"
                   >
-                    {sending ? "Sending…" : "Send"}
+                    {sendMutation.isPending ? "Sending…" : "Send"}
                   </button>
                 </div>
               </>

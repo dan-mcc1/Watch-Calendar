@@ -9,3 +9,4 @@ icalendar
 resend
 slowapi
 pydantic[email]
+cachetools

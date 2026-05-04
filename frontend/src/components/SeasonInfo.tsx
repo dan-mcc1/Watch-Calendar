@@ -1,17 +1,20 @@
 import { BASE_IMAGE_URL } from "../constants";
 import { Season, Episode } from "../types/calendar";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useAuthUser } from "../hooks/useAuthUser";
 import { apiFetch } from "../utils/apiFetch";
 import { Link } from "react-router-dom";
+import {
+  useWatchedEpisodes,
+  useToggleEpisode,
+  useToggleSeason,
+} from "../hooks/api/useEpisodes";
 
 type FullSeason = Season & { episodes?: Episode[] };
 
 interface SeasonInfoProps {
   showId: number;
   seasons: Season[];
-  refreshKey?: number;
-  /** Called after any episode or season watch toggle so the parent can refresh the WatchButton. */
   onEpisodeToggle?: () => void;
 }
 
@@ -60,7 +63,6 @@ function epKey(seasonNumber: number, episodeNumber: number) {
 export default function SeasonInfo({
   showId,
   seasons,
-  refreshKey,
   onEpisodeToggle,
 }: SeasonInfoProps) {
   const user = useAuthUser();
@@ -72,50 +74,17 @@ export default function SeasonInfo({
     {},
   );
 
-  // Set of "season_episode" keys for watched episodes
-  const [watchedEpisodes, setWatchedEpisodes] = useState<Set<string>>(
-    new Set(),
-  );
-  const [togglingEpisodes, setTogglingEpisodes] = useState<Set<string>>(
-    new Set(),
-  );
-  const [togglingSeasons, setTogglingSeasons] = useState<Set<number>>(
-    new Set(),
-  );
+  const { data: watchedEpisodesData } = useWatchedEpisodes(showId);
+  const rawEpisodes = (watchedEpisodesData as { season_number: number; episode_number: number }[] | undefined) ?? [];
+  const watchedEpisodes = new Set(rawEpisodes.map((e) => epKey(e.season_number, e.episode_number)));
+
+  const toggleEpisodeMutation = useToggleEpisode();
+  const toggleSeasonMutation = useToggleSeason();
+
+  const [togglingEpisodes, setTogglingEpisodes] = useState<Set<string>>(new Set());
+  const [togglingSeasons, setTogglingSeasons] = useState<Set<number>>(new Set());
+
   const isLoggedIn = !!user;
-
-  async function fetchWatchedEpisodes(signal?: AbortSignal) {
-    try {
-      const res = await apiFetch(`/watched-episode/${showId}`, { signal });
-      if (!res.ok) return;
-      const data: { season_number: number; episode_number: number }[] =
-        await res.json();
-      setWatchedEpisodes(
-        new Set(data.map((e) => epKey(e.season_number, e.episode_number))),
-      );
-    } catch (err) {
-      if (err instanceof DOMException && err.name === "AbortError") return;
-      console.error("Failed to load watched episodes", err);
-    }
-  }
-
-  useEffect(() => {
-    if (!user) {
-      setWatchedEpisodes(new Set());
-      return;
-    }
-    const controller = new AbortController();
-    fetchWatchedEpisodes(controller.signal);
-    return () => controller.abort();
-  }, [showId, user]);
-
-  useEffect(() => {
-    if (refreshKey === undefined || refreshKey === 0) return;
-    if (!user) return;
-    const controller = new AbortController();
-    fetchWatchedEpisodes(controller.signal);
-    return () => controller.abort();
-  }, [refreshKey]);
 
   const toggleSeason = async (season: Season) => {
     if (expandedSeasons[season.season_number]) {
@@ -143,39 +112,17 @@ export default function SeasonInfo({
     episodeNumber: number,
   ) => {
     if (!user) return;
-
     const key = epKey(seasonNumber, episodeNumber);
-    const alreadyWatched = watchedEpisodes.has(key);
-
+    const watched = watchedEpisodes.has(key);
     setTogglingEpisodes((prev) => new Set(prev).add(key));
-    // Optimistic update
-    setWatchedEpisodes((prev) => {
-      const next = new Set(prev);
-      if (alreadyWatched) next.delete(key);
-      else next.add(key);
-      return next;
-    });
-
     try {
-      const path = alreadyWatched
-        ? `/watched-episode/remove`
-        : `/watched-episode/add`;
-      const method = alreadyWatched ? "DELETE" : "POST";
-      const res = await apiFetch(
-        `${path}?show_id=${showId}&season_number=${seasonNumber}&episode_number=${episodeNumber}`,
-        { method },
-      );
-      if (!res.ok) throw new Error("Request failed");
-      onEpisodeToggle?.();
-    } catch (err) {
-      console.error(err);
-      // Revert optimistic update on failure
-      setWatchedEpisodes((prev) => {
-        const next = new Set(prev);
-        if (alreadyWatched) next.add(key);
-        else next.delete(key);
-        return next;
+      await toggleEpisodeMutation.mutateAsync({
+        showId,
+        seasonNumber,
+        episodeNumber,
+        watched,
       });
+      onEpisodeToggle?.();
     } finally {
       setTogglingEpisodes((prev) => {
         const next = new Set(prev);
@@ -187,22 +134,14 @@ export default function SeasonInfo({
 
   const toggleSeasonWatched = async (season: Season, allWatched: boolean) => {
     if (!user) return;
-
     setTogglingSeasons((prev) => new Set(prev).add(season.season_number));
     try {
-      const path = allWatched
-        ? `/watched-episode/season/remove`
-        : `/watched-episode/season/add`;
-      const method = allWatched ? "DELETE" : "POST";
-      const res = await apiFetch(
-        `${path}?show_id=${showId}&season_number=${season.season_number}`,
-        { method },
-      );
-      if (!res.ok) throw new Error("Request failed");
-      await fetchWatchedEpisodes();
+      await toggleSeasonMutation.mutateAsync({
+        showId,
+        seasonNumber: season.season_number,
+        allWatched,
+      });
       onEpisodeToggle?.();
-    } catch (err) {
-      console.error(err);
     } finally {
       setTogglingSeasons((prev) => {
         const next = new Set(prev);
@@ -221,7 +160,6 @@ export default function SeasonInfo({
           const loadingSeason = loadingSeasons[season.season_number];
           const seasonToggling = togglingSeasons.has(season.season_number);
 
-          // Count how many episodes in this season are watched
           const watchedCount = Array.from(watchedEpisodes).filter((key) => {
             const [s] = key.split("_").map(Number);
             return s === season.season_number;

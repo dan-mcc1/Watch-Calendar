@@ -1,22 +1,13 @@
 import { useEffect, useState } from "react";
-import { apiFetch } from "../utils/apiFetch";
 import { useAuthUser } from "../hooks/useAuthUser";
 import type { Movie, Show } from "../types/calendar";
 import MediaList from "../components/MediaList";
 import { usePageTitle } from "../hooks/usePageTitle";
 import { Link } from "react-router-dom";
+import { useForYou } from "../hooks/api/useRecommendations";
 
 type Tab = "movies" | "tv";
 type Mode = "recent" | "top_rated";
-
-const forYouCache = new Map<
-  string,
-  { movies: Movie[]; shows: Show[]; seedCount: number }
->();
-
-export function clearForYouCache() {
-  forYouCache.clear();
-}
 
 const TABS: { key: Tab; label: string }[] = [
   { key: "movies", label: "Movies" },
@@ -30,62 +21,22 @@ const MODES: { key: Mode; label: string }[] = [
 
 export default function ForYou() {
   usePageTitle("For You");
-  const [movies, setMovies] = useState<Movie[]>([]);
-  const [shows, setShows] = useState<Show[]>([]);
-  const [seedCount, setSeedCount] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [notSignedIn, setNotSignedIn] = useState(false);
+  const currentUser = useAuthUser();
   const [activeTab, setActiveTab] = useState<Tab>("movies");
   const [mode, setMode] = useState<Mode>("recent");
   const [page, setPage] = useState(1);
 
   const PAGE_SIZE = 10;
 
-  const currentUser = useAuthUser();
+  const { data, isLoading } = useForYou(mode);
+  const movies = (data?.movies ?? []) as Movie[];
+  const shows = (data?.shows ?? []) as Show[];
+  const seedCount = data?.seed_count ?? 0;
 
-  useEffect(() => {
-    if (!currentUser) {
-      setNotSignedIn(true);
-      setLoading(false);
-    }
-  }, [currentUser]);
-
-  useEffect(() => {
-    if (!currentUser) return;
-    const cacheKey = `${currentUser.uid}:${mode}`;
-    const cached = forYouCache.get(cacheKey);
-    if (cached) {
-      setMovies(cached.movies);
-      setShows(cached.shows);
-      setSeedCount(cached.seedCount);
-      setPage(1);
-      setLoading(false);
-      return;
-    }
-    setLoading(true);
-    setPage(1);
-    apiFetch(`/recommendations/for-you?mode=${mode}`)
-        .then((r) => {
-          if (!r.ok) throw new Error();
-          return r.json();
-        })
-        .then((data) => {
-          const movies = data.movies ?? [];
-          const shows = data.shows ?? [];
-          const seedCount = data.seed_count ?? 0;
-          setMovies(movies);
-          setShows(shows);
-          setSeedCount(seedCount);
-          forYouCache.set(cacheKey, { movies, shows, seedCount });
-        })
-        .catch(console.error)
-        .finally(() => setLoading(false));
-  }, [currentUser, mode]);
-
-  // Reset page when tab changes
+  // Reset page when tab or mode changes
   useEffect(() => {
     setPage(1);
-  }, [activeTab]);
+  }, [activeTab, mode]);
 
   const activeItems = activeTab === "movies" ? movies : shows;
   const totalPages = Math.ceil(activeItems.length / PAGE_SIZE);
@@ -96,22 +47,7 @@ export default function ForYou() {
       ? { movies: pageItems as Movie[], shows: [], people: [] }
       : { movies: [], shows: pageItems as Show[], people: [] };
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-32">
-        <div className="flex flex-col items-center gap-3">
-          <div className="w-8 h-8 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
-          <p className="text-neutral-400 text-sm">
-            {mode === "top_rated"
-              ? "Finding recommendations based on your top rated…"
-              : "Building your recommendations…"}
-          </p>
-        </div>
-      </div>
-    );
-  }
-
-  if (notSignedIn) {
+  if (!currentUser) {
     return (
       <div className="flex flex-col items-center justify-center py-32 text-center px-4">
         <p className="text-neutral-300 font-medium mb-2">
@@ -123,6 +59,21 @@ export default function ForYou() {
         >
           Sign in →
         </Link>
+      </div>
+    );
+  }
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-32">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-8 h-8 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
+          <p className="text-neutral-400 text-sm">
+            {mode === "top_rated"
+              ? "Finding recommendations based on your top rated…"
+              : "Building your recommendations…"}
+          </p>
+        </div>
       </div>
     );
   }

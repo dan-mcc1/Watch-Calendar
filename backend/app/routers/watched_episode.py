@@ -45,7 +45,7 @@ def remove_episode(
 
 
 # Get all watched episodes for the current user
-@router.get("/")
+@router.get("")
 def get_user_watched_episodes(
     db: Session = Depends(get_db),
     uid: str = Depends(get_current_user),

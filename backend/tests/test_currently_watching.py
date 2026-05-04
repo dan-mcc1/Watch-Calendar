@@ -73,12 +73,12 @@ class TestCurrentlyWatchingRemove:
 
 class TestCurrentlyWatchingFetch:
     def test_fetch_empty(self, client, seed_users):
-        r = client.get("/currently-watching/")
+        r = client.get("/currently-watching")
         assert r.status_code == 200
 
     def test_fetch_shows_added_item(self, client, seed_show):
         add_cw(client)
-        r = client.get("/currently-watching/")
+        r = client.get("/currently-watching")
         assert r.status_code == 200
         data = r.json()
         # Response structure varies by service — just confirm no error and show is present
@@ -137,9 +137,18 @@ class TestListTransitions:
         assert self._status(client, "tv", 1396) == "Currently Watching"
 
         # Remove from CW — tracking_count drops to 0 but add Watched directly
-        db.add(Watched(user_id="test-uid-1", content_type="tv", content_id=1396, watched_at=datetime.utcnow()))
+        db.add(
+            Watched(
+                user_id="test-uid-1",
+                content_type="tv",
+                content_id=1396,
+                watched_at=datetime.utcnow(),
+            )
+        )
         db.commit()
-        db.query(CurrentlyWatching).filter_by(user_id="test-uid-1", content_type="tv", content_id=1396).delete()
+        db.query(CurrentlyWatching).filter_by(
+            user_id="test-uid-1", content_type="tv", content_id=1396
+        ).delete()
         db.commit()
         assert self._status(client, "tv", 1396) == "Watched"
 

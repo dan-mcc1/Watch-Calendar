@@ -1,7 +1,8 @@
-import { useState, useEffect } from "react";
-import { useAuthUser } from "./useAuthUser";
-import { apiFetch } from "../utils/apiFetch";
-import { getCachedStatuses, mergeCachedStatuses } from "../utils/statusCache";
+import { useQuery } from "@tanstack/react-query";
+import { queryKeys } from "./api/queryKeys";
+import { queryFetch } from "./api/queryFetch";
+import { useWatchStatus } from "./api/useWatchStatus";
+import { useAggregateRating, useExternalScores } from "./api/useReviews";
 import type { WatchStatus } from "../components/WatchButton";
 import type { ExternalScores, AggregateRating } from "../types/media";
 
@@ -23,100 +24,43 @@ export interface UseMediaInfoResult<T> {
 }
 
 export function useMediaInfo<T extends { id: number; external_ids?: { imdb_id?: string } }>(
-  options: UseMediaInfoOptions
+  options: UseMediaInfoOptions,
 ): UseMediaInfoResult<T> {
   const { contentType, id, fetchUrl } = options;
-  const user = useAuthUser();
 
-  const [data, setData] = useState<T | undefined>(undefined);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [initialStatus, setInitialStatus] = useState<WatchStatus | undefined>(undefined);
-  const [initialRating, setInitialRating] = useState<number | null | undefined>(undefined);
-  const [statusReady, setStatusReady] = useState(false);
-  const [externalScores, setExternalScores] = useState<ExternalScores | null>(null);
-  const [aggRating, setAggRating] = useState<AggregateRating | null>(null);
-
-  // Pattern 1: Reset on id change
-  useEffect(() => {
-    setData(undefined);
-    setInitialStatus(undefined);
-    setInitialRating(undefined);
-    setStatusReady(false);
-  }, [id]);
-
-  // Pattern 2: Fetch watch status (after data loads)
-  useEffect(() => {
-    if (!user || !data) return;
-    const items = [{ content_type: contentType, content_id: data.id }];
-    const { cached, missing } = getCachedStatuses(user.uid, items);
-    if (!missing.length) {
-      setInitialStatus(cached[`${contentType}:${data.id}`]?.status as WatchStatus);
-      setInitialRating(cached[`${contentType}:${data.id}`]?.rating ?? null);
-      setStatusReady(true);
-      return;
-    }
-    apiFetch("/watchlist/status/bulk", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(missing),
-    })
-      .then((r) => (r.ok ? r.json() : {}))
-      .then((d: Record<string, { status: string; rating: number | null }>) => {
-        mergeCachedStatuses(user.uid, d);
-        setInitialStatus(d[`${contentType}:${data.id}`]?.status as WatchStatus);
-        setInitialRating(d[`${contentType}:${data.id}`]?.rating ?? null);
-      })
-      .catch(() => {})
-      .finally(() => setStatusReady(true));
-  }, [user, data]);
-
-  // Pattern 3: Fetch main data + parallel ratings
-  useEffect(() => {
-    if (!id) return;
-    async function fetchData() {
-      try {
-        setLoading(true);
-        const res = await apiFetch(fetchUrl);
-        if (!res.ok) throw new Error("Failed to fetch");
-        const rawData = await res.json();
-        let parsed: T;
-        if (rawData["watch/providers"]?.["results"]?.["US"]) {
-          parsed = { ...rawData, providers: rawData["watch/providers"]["results"]["US"] };
-        } else {
-          parsed = rawData;
-        }
-        setData(parsed);
-        // Parallel: aggregate ratings
-        apiFetch(`/reviews/aggregate?content_type=${contentType}&content_id=${id}`)
-          .then((r) => r.json())
-          .then(setAggRating)
-          .catch(() => {});
-        // Parallel: external scores (only if imdb_id exists)
-        const imdbId = parsed.external_ids?.imdb_id;
-        if (imdbId) {
-          apiFetch(`/reviews/external-scores?imdb_id=${encodeURIComponent(imdbId)}`)
-            .then((r) => r.json())
-            .then((scores) => Object.keys(scores).length > 0 && setExternalScores(scores))
-            .catch(() => {});
-        }
-      } catch (err: any) {
-        setError(err.message || "Something went wrong");
-      } finally {
-        setLoading(false);
+  // Main data fetch
+  const mediaQuery = useQuery({
+    queryKey: queryKeys.mediaDetail(contentType, id ?? ""),
+    queryFn: async () => {
+      const rawData = await queryFetch<any>(fetchUrl);
+      if (rawData["watch/providers"]?.["results"]?.["US"]) {
+        return { ...rawData, providers: rawData["watch/providers"]["results"]["US"] } as T;
       }
-    }
-    fetchData();
-  }, [id]);
+      return rawData as T;
+    },
+    enabled: !!id,
+  });
+
+  // Watch status (depends on media data for content ID)
+  const statusQuery = useWatchStatus(contentType, mediaQuery.data?.id ?? 0);
+
+  // Aggregate rating
+  const aggQuery = useAggregateRating(contentType, id ?? "");
+
+  // External scores (depends on imdb_id from main data)
+  const imdbId = mediaQuery.data?.external_ids?.imdb_id;
+  const scoresQuery = useExternalScores(imdbId);
 
   return {
-    data,
-    loading,
-    error,
-    initialStatus,
-    initialRating,
-    statusReady,
-    externalScores,
-    aggRating,
+    data: mediaQuery.data,
+    loading: mediaQuery.isPending,
+    error: mediaQuery.error?.message ?? null,
+    initialStatus: statusQuery.data?.status,
+    initialRating: statusQuery.data?.rating ?? null,
+    statusReady: statusQuery.isFetched || !statusQuery.isLoading,
+    externalScores: scoresQuery.data && Object.keys(scoresQuery.data).length > 0
+      ? scoresQuery.data
+      : null,
+    aggRating: aggQuery.data ?? null,
   };
 }

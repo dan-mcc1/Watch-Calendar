@@ -1,11 +1,16 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { BASE_IMAGE_URL } from "../constants";
-import { apiFetch } from "../utils/apiFetch";
 import { useAuthUser } from "../hooks/useAuthUser";
 import { Link, useNavigate } from "react-router-dom";
 import { usePageTitle } from "../hooks/usePageTitle";
 import WatchButton, { WatchStatus } from "../components/WatchButton";
-import { getCachedStatuses, mergeCachedStatuses } from "../utils/statusCache";
+import { useMyActivity, useFriendsActivity } from "../hooks/api/useActivity";
+import {
+  useRecommendationsInbox,
+  useMarkRecRead,
+  useDeleteRecommendation,
+} from "../hooks/api/useRecommendations";
+import { useBulkWatchStatus } from "../hooks/api/useWatchStatus";
 
 type StatusMap = Record<string, { status: WatchStatus; rating: number | null }>;
 
@@ -321,128 +326,44 @@ export default function ActivityFeedPage() {
   const user = useAuthUser();
   const navigate = useNavigate();
   const [tab, setTab] = useState<Tab>("friends");
-  const [myItems, setMyItems] = useState<ActivityItem[]>([]);
-  const [friendItems, setFriendItems] = useState<ActivityItem[]>([]);
-  const [recommendations, setRecommendations] = useState<RecommendationItem[]>(
-    [],
-  );
-  const [myLoading, setMyLoading] = useState(true);
-  const [friendsLoading, setFriendsLoading] = useState(true);
-  const [recsLoading, setRecsLoading] = useState(true);
-  const [currentUserId, setCurrentUserId] = useState<string>("");
-  const [statusMap, setStatusMap] = useState<StatusMap>({});
+
+  const { data: myData, isLoading: myLoading } = useMyActivity();
+  const { data: friendData, isLoading: friendsLoading } = useFriendsActivity();
+  const { data: recsData, isLoading: recsLoading } = useRecommendationsInbox();
+
+  const myItems = (myData as ActivityItem[] | undefined) ?? [];
+  const friendItems = (friendData as ActivityItem[] | undefined) ?? [];
+  const recommendations = (recsData as RecommendationItem[] | undefined) ?? [];
+
+  const markReadMutation = useMarkRecRead();
+  const deleteRecMutation = useDeleteRecommendation();
 
   useEffect(() => {
-    if (!user) {
-      navigate("/signIn");
-      return;
-    }
-    setCurrentUserId(user.uid);
-
-    apiFetch("/friends/my-activity")
-      .then((r) => (r.ok ? r.json() : []))
-      .then(setMyItems)
-      .catch(() => {})
-      .finally(() => setMyLoading(false));
-
-    apiFetch("/friends/activity")
-      .then((r) => (r.ok ? r.json() : []))
-      .then(setFriendItems)
-      .catch(() => {})
-      .finally(() => setFriendsLoading(false));
-
-    apiFetch("/recommendations/inbox")
-      .then((r) => (r.ok ? r.json() : []))
-      .then(setRecommendations)
-      .catch(() => {})
-      .finally(() => setRecsLoading(false));
+    if (!user) navigate("/signIn");
   }, [user, navigate]);
 
-  // Bulk-fetch watch statuses for all tabs
-  useEffect(() => {
-    if (
-      !currentUserId ||
-      (!myItems.length && !friendItems.length && !recommendations.length)
-    ) {
-      return;
-    }
-    if (!user) return;
+  const bulkItems = useMemo(() => {
     const seen = new Set<string>();
-    const unique = [...myItems, ...friendItems, ...recommendations]
+    return [...myItems, ...friendItems, ...recommendations]
       .map((i) => ({ content_type: i.content_type, content_id: i.content_id }))
       .filter(({ content_type, content_id }) => {
         const key = `${content_type}:${content_id}`;
         return seen.has(key) ? false : (seen.add(key), true);
       });
-    const { cached, missing } = getCachedStatuses(user.uid, unique);
-    if (!missing.length) {
-      setStatusMap(cached as StatusMap);
-      return;
-    }
-    apiFetch("/watchlist/status/bulk", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(missing),
-    })
-      .then((r) => (r.ok ? r.json() : {}))
-      .then((data) => {
-        mergeCachedStatuses(user.uid, data);
-        setStatusMap({ ...cached, ...data } as StatusMap);
-      })
-      .catch(() => setStatusMap(cached as StatusMap));
-  }, [myItems, friendItems, recommendations, currentUserId]);
+  }, [myItems, friendItems, recommendations]);
 
-  // Refetch recommendations inbox when any rec mutation fires
-  useEffect(() => {
-    async function handler() {
-      try {
-        const res = await apiFetch("/recommendations/inbox");
-        if (res.ok) setRecommendations(await res.json());
-      } catch {
-        // non-critical
-      }
-    }
-    window.addEventListener("recommendations-updated", handler);
-    return () => window.removeEventListener("recommendations-updated", handler);
-  }, []);
+  const { data: bulkStatusData } = useBulkWatchStatus(bulkItems);
+  const statusMap = (bulkStatusData as StatusMap | undefined) ?? {};
 
   async function markRead(id: number) {
-    setRecommendations((prev) =>
-      prev.map((r) => (r.id === id ? { ...r, is_read: true } : r)),
-    );
-
-    try {
-      const res = await apiFetch(`/recommendations/${id}/read`, {
-        method: "PATCH",
-      });
-
-      if (!res.ok) throw new Error();
-
-      window.dispatchEvent(new CustomEvent("rec-marked-read"));
-      window.dispatchEvent(new CustomEvent("recommendations-updated"));
-    } catch {
-      setRecommendations((prev) =>
-        prev.map((r) => (r.id === id ? { ...r, is_read: false } : r)),
-      );
-    }
+    await markReadMutation.mutateAsync(id).catch(() => {});
   }
 
   async function deleteRec(id: number) {
-    setRecommendations((prev) => prev.filter((r) => r.id !== id));
-    try {
-      const res = await apiFetch(`/recommendations/${id}`, {
-        method: "DELETE",
-      });
-
-      if (!res.ok) throw new Error();
-
-      window.dispatchEvent(new CustomEvent("rec-marked-read"));
-      window.dispatchEvent(new CustomEvent("recommendations-updated"));
-    } catch {
-      // non-critical, item already removed from UI
-    }
+    await deleteRecMutation.mutateAsync(id).catch(() => {});
   }
 
+  const currentUserId = user?.uid ?? "";
   const unreadCount = recommendations.filter((r) => !r.is_read).length;
 
   return (

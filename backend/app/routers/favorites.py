@@ -13,7 +13,7 @@ from app.core.limiter import limiter
 router = APIRouter()
 
 
-@router.get("/")
+@router.get("")
 def get_user_favorites(
     db: Session = Depends(get_db),
     uid: str = Depends(get_current_user),

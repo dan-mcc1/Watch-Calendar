@@ -8,7 +8,7 @@ from app.services.calendar_service import get_calendar
 router = APIRouter()
 
 
-@router.get("/")
+@router.get("")
 def calendar(
     db: Session = Depends(get_db),
     uid: str = Depends(get_current_user),

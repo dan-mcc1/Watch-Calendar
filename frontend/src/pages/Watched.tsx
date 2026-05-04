@@ -1,10 +1,9 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { Show, Movie } from "../types/calendar";
 import { useNavigate } from "react-router-dom";
-import { apiFetch } from "../utils/apiFetch";
-import { useAuthUser } from "../hooks/useAuthUser";
 import MediaCard from "../components/MediaCard";
 import { usePageTitle } from "../hooks/usePageTitle";
+import { useWatched, useRemoveFromList } from "../hooks/api/useLists";
 
 type TabType = "all" | "movies" | "tv";
 type SortType =
@@ -76,45 +75,17 @@ function applySort<T extends Movie | Show>(items: T[], sort: SortType): T[] {
 export default function Watched() {
   usePageTitle("Watched");
   const navigate = useNavigate();
-  const user = useAuthUser();
-  const [results, setResults] = useState<{ movies: Movie[]; shows: Show[] }>({ movies: [], shows: [] });
-  const [loading, setLoading] = useState(true);
+  const { data, isLoading } = useWatched();
+  const removeFromList = useRemoveFromList();
   const [activeTab, setActiveTab] = useState<TabType>("all");
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<SortType>("default");
 
-  async function onRemove(type: "tv" | "movie", content_id: number) {
-    try {
-      const res = await apiFetch("/watched/remove", {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content_type: type, content_id }),
-      });
-      if (!res.ok) throw new Error("Failed to remove item");
-      setResults((prev) => ({
-        movies: type === "movie" ? prev.movies.filter((m) => m.id !== content_id) : prev.movies,
-        shows: type === "tv" ? prev.shows.filter((s) => s.id !== content_id) : prev.shows,
-      }));
-    } catch (err) {
-      console.error(err);
-    }
-  }
+  const results = data ?? { movies: [], shows: [] };
 
-  useEffect(() => {
-    if (!user) return;
-    (async () => {
-      try {
-        const res = await apiFetch("/watched");
-        if (!res.ok) throw new Error("Failed to fetch");
-        const data = await res.json();
-        setResults({ movies: data.movies ?? [], shows: data.shows ?? [] });
-      } catch (err) {
-        console.error(err);
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, [user]);
+  function onRemove(type: "tv" | "movie", content_id: number) {
+    removeFromList.mutate({ list: "watched", contentType: type, contentId: content_id });
+  }
 
   const totalCount = results.movies.length + results.shows.length;
   const showMovies = activeTab === "all" || activeTab === "movies";
@@ -141,7 +112,7 @@ export default function Watched() {
         <p className="text-neutral-400">Everything you've already seen</p>
       </div>
 
-      {loading && (
+      {isLoading && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {Array.from({ length: 8 }).map((_, i) => (
             <div key={i} className="rounded-xl overflow-hidden bg-neutral-800 border border-neutral-700 flex flex-col animate-pulse">
@@ -155,7 +126,7 @@ export default function Watched() {
         </div>
       )}
 
-      {!loading && (
+      {!isLoading && (
         <div className="flex gap-1 border-b border-neutral-700 mb-6">
           {tabs.map((tab) => (
             <button
@@ -222,7 +193,7 @@ export default function Watched() {
         </div>
       )}
 
-      {!loading && totalCount === 0 && (
+      {!isLoading && totalCount === 0 && (
         <div className="flex flex-col items-center justify-center py-20 text-center">
           <div className="w-16 h-16 rounded-full bg-neutral-800 border border-neutral-700 flex items-center justify-center mb-4">
             <svg className="w-8 h-8 text-neutral-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">

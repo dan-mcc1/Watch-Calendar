@@ -65,7 +65,7 @@ def remove_item(
     return remove_from_watched(db, uid, content_type, content_id)
 
 
-@router.get("/")
+@router.get("")
 def get_user_watched(
     db: Session = Depends(get_db),
     uid: str = Depends(get_current_user),

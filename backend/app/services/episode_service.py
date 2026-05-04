@@ -1,5 +1,4 @@
 # app/services/episode_service.py
-import threading
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date
 from sqlalchemy.orm import Session
@@ -181,21 +180,18 @@ def maybe_sync_show_episodes(db: Session, show_id: int):
 
 def sync_show_episodes_background(show_id: int):
     """
-    Fire-and-forget: sync all episodes for a show in a daemon thread.
-    The calling request returns immediately; episodes appear in the DB shortly after.
+    Background task: sync all episodes for a show using its own DB session.
+    Intended to be called via FastAPI BackgroundTasks, not directly.
     """
     from app.db.session import SessionLocal
 
-    def _run():
-        db = SessionLocal()
-        try:
-            maybe_sync_show_episodes(db, show_id)
-        except Exception as e:
-            print(f"[episode sync] Error syncing show {show_id}: {e}")
-        finally:
-            db.close()
-
-    threading.Thread(target=_run, daemon=True).start()
+    db = SessionLocal()
+    try:
+        maybe_sync_show_episodes(db, show_id)
+    except Exception as e:
+        print(f"[episode sync] Error syncing show {show_id}: {e}")
+    finally:
+        db.close()
 
 
 def get_or_create_episode(

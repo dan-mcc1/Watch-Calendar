@@ -1,51 +1,15 @@
-import { useEffect, useState, useCallback } from "react";
+import { useState } from "react";
 import { useAuthUser } from "../hooks/useAuthUser";
-import { apiFetch } from "../utils/apiFetch";
 import { BASE_IMAGE_URL, getAvatarColor } from "../constants";
-import { Movie, Show } from "../types/calendar";
 import { Link } from "react-router-dom";
 import FriendSearch from "../components/FriendSearch";
 import FriendRequests from "../components/FriendRequests";
 import FriendsList from "../components/FriendsList";
 import StatsSection from "../components/StatsSection";
 import { usePageTitle } from "../hooks/usePageTitle";
-import {
-  getCachedWatchlist,
-  setCachedWatchlist,
-  getCachedWatched,
-  setCachedWatched,
-} from "../utils/watchlistCache";
-
-interface DBUser {
-  id: string;
-  email: string | null;
-  username: string | null;
-  avatar_key: string | null;
-  profile_visibility: string | null;
-  bio: string | null;
-}
-
-interface FriendEntry {
-  friendship_id: number;
-  friend: { id: string; username: string; email: string };
-}
-
-interface IncomingRequest {
-  friendship_id: number;
-  from_user: { id: string; username: string; email: string };
-  created_at: string;
-}
-
-interface OutgoingRequest {
-  friendship_id: number;
-  to_user: { id: string; username: string; email: string };
-  created_at: string;
-}
-
-interface FollowerEntry {
-  friendship_id: number;
-  follower: { id: string; username: string; email: string };
-}
+import { useProfileSummary } from "../hooks/api/useUser";
+import { useWatchlist, useWatched } from "../hooks/api/useLists";
+import { useSendFriendRequest } from "../hooks/api/useFriends";
 
 type FriendsTab = "friends" | "requests" | "followers" | "add";
 
@@ -109,125 +73,43 @@ function HeroAvatar({
 export default function ProfilePage() {
   usePageTitle("My Profile");
   const user = useAuthUser();
-  const [dbUser, setDbUser] = useState<DBUser | null>(null);
-
-  const [watchlist, setWatchlist] = useState<{
-    movies: Movie[];
-    shows: Show[];
-  }>({ movies: [], shows: [] });
-  const [watched, setWatched] = useState<{ movies: Movie[]; shows: Show[] }>({
-    movies: [],
-    shows: [],
-  });
-  const [favorites, setFavorites] = useState<{
-    movies: Movie[];
-    shows: Show[];
-  }>({ movies: [], shows: [] });
-  const [loading, setLoading] = useState(true);
 
   // Collapsible sections
   const [watchlistOpen, setWatchlistOpen] = useState(false);
   const [watchedOpen, setWatchedOpen] = useState(false);
   const [statsOpen, setStatsOpen] = useState(false);
 
-  // Friends
+  // Friends tab
   const [friendsTab, setFriendsTab] = useState<FriendsTab>("friends");
-  const [friends, setFriends] = useState<FriendEntry[]>([]);
-  const [incoming, setIncoming] = useState<IncomingRequest[]>([]);
-  const [outgoing, setOutgoing] = useState<OutgoingRequest[]>([]);
-  const [followers, setFollowers] = useState<FollowerEntry[]>([]);
-  const [addingBack, setAddingBack] = useState<string | null>(null);
 
-  async function fetchFriends() {
-    const [friendsRes, incomingRes, outgoingRes, followersRes] =
-      await Promise.all([
-        apiFetch("/friends/"),
-        apiFetch("/friends/requests/incoming"),
-        apiFetch("/friends/requests/outgoing"),
-        apiFetch("/friends/followers"),
-      ]);
-    setFriends(friendsRes.ok ? await friendsRes.json() : []);
-    setIncoming(incomingRes.ok ? await incomingRes.json() : []);
-    setOutgoing(outgoingRes.ok ? await outgoingRes.json() : []);
-    setFollowers(followersRes.ok ? await followersRes.json() : []);
+  const { data: summary, isLoading: summaryLoading } = useProfileSummary();
+  const { data: watchlistFull, isLoading: watchlistLoading } = useWatchlist(watchlistOpen);
+  const { data: watchedFull, isLoading: watchedLoading } = useWatched(watchedOpen);
+
+  const typedDbUser = summary?.user;
+  const favorites = summary?.favorites ?? { movies: [], shows: [] };
+  const watchlistPreview = summary?.watchlist ?? { movies: [], shows: [], total_movies: 0, total_shows: 0 };
+  const watchedPreview = summary?.watched ?? { movies: [], shows: [], total_movies: 0, total_shows: 0 };
+  const friends = summary?.friends ?? [];
+  const incoming = summary?.incoming_requests ?? [];
+  const outgoing = summary?.outgoing_requests ?? [];
+  const followers = summary?.followers ?? [];
+
+  const watchlist = watchlistFull ?? { movies: watchlistPreview.movies, shows: watchlistPreview.shows };
+  const watched = watchedFull ?? { movies: watchedPreview.movies, shows: watchedPreview.shows };
+
+  const loading = summaryLoading || watchlistLoading || watchedLoading;
+
+  const sendRequestMutation = useSendFriendRequest();
+  const addingBackUsername =
+    sendRequestMutation.isPending &&
+    typeof sendRequestMutation.variables === "string"
+      ? (sendRequestMutation.variables as string)
+      : null;
+
+  async function addBack(follower: { id: string; username: string }) {
+    await sendRequestMutation.mutateAsync(follower.username).catch(() => {});
   }
-
-  async function addBack(follower: FollowerEntry["follower"]) {
-    if (addingBack) return;
-    setAddingBack(follower.id);
-    try {
-      const res = await apiFetch("/friends/request", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ addressee_username: follower.username }),
-      });
-      if (res.ok) {
-        // Upgrade from follower → mutual friend
-        setFollowers((prev) =>
-          prev.filter((f) => f.follower.id !== follower.id),
-        );
-        setFriends((prev) => [...prev, { friendship_id: 0, friend: follower }]);
-      }
-    } finally {
-      setAddingBack(null);
-    }
-  }
-
-  const fetchAll = useCallback(async (uid: string) => {
-    setLoading(true);
-    try {
-      const cachedWatchlist = getCachedWatchlist(uid);
-      const cachedWatched = getCachedWatched(uid);
-
-      const [meRes, favoritesRes, watchlistRes, watchedRes] = await Promise.all(
-        [
-          apiFetch("/user/me"),
-          apiFetch("/favorites"),
-          cachedWatchlist ? Promise.resolve(null) : apiFetch("/watchlist"),
-          cachedWatched ? Promise.resolve(null) : apiFetch("/watched"),
-        ],
-      );
-
-      setDbUser(meRes.ok ? await meRes.json() : null);
-      setFavorites(
-        favoritesRes.ok ? await favoritesRes.json() : { movies: [], shows: [] },
-      );
-
-      if (cachedWatchlist) {
-        setWatchlist(cachedWatchlist);
-      } else if (watchlistRes?.ok) {
-        const data = await watchlistRes.json();
-        const wl = { movies: data.movies ?? [], shows: data.shows ?? [] };
-        setWatchlist(wl);
-        setCachedWatchlist(uid, wl);
-      }
-
-      if (cachedWatched) {
-        setWatched(cachedWatched);
-      } else if (watchedRes?.ok) {
-        const data = await watchedRes.json();
-        const wd = { movies: data.movies ?? [], shows: data.shows ?? [] };
-        setWatched(wd);
-        setCachedWatched(uid, wd);
-      }
-
-      await fetchFriends();
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (user) fetchAll(user.uid);
-  }, [user, fetchAll]);
-
-  // Refresh friend data whenever any friends-related mutation fires
-  useEffect(() => {
-    window.addEventListener("friends-updated", fetchFriends);
-    return () => window.removeEventListener("friends-updated", fetchFriends);
-  }, []);
 
   if (!user) {
     return (
@@ -238,8 +120,8 @@ export default function ProfilePage() {
   }
 
   const incomingCount = incoming.length;
-  const totalWatched = watched.movies.length + watched.shows.length;
-  const totalWatchlist = watchlist.movies.length + watchlist.shows.length;
+  const totalWatched = watchedPreview.total_movies + watchedPreview.total_shows;
+  const totalWatchlist = watchlistPreview.total_movies + watchlistPreview.total_shows;
   const totalFavorites = favorites.movies.length + favorites.shows.length;
 
   return (
@@ -247,15 +129,15 @@ export default function ProfilePage() {
       {/* ── Hero banner ── */}
       <div className="rounded-2xl overflow-hidden bg-gradient-to-br from-primary-800 via-primary-700 to-primary-900">
         <div className="px-6 pt-8 pb-6 flex flex-col sm:flex-row items-center sm:items-end gap-5">
-          <HeroAvatar avatarKey={dbUser?.avatar_key} photoURL={user.photoURL} />
+          <HeroAvatar avatarKey={typedDbUser?.avatar_key} photoURL={user.photoURL} />
           <div className="flex-1 text-center sm:text-left">
             <h1 className="text-2xl sm:text-3xl font-bold text-white">
               {user.displayName ?? "User"}
             </h1>
             <div className="mt-1 flex items-center gap-2 justify-center sm:justify-start">
-              {dbUser?.username ? (
+              {typedDbUser?.username ? (
                 <span className="text-neutral-300 text-sm">
-                  @{dbUser.username}
+                  @{typedDbUser.username}
                 </span>
               ) : (
                 <span className="text-amber-400 text-sm">No username set</span>
@@ -265,8 +147,8 @@ export default function ProfilePage() {
             <p className="text-neutral-500 text-xs mt-0.5">
               Joined {user.metadata?.creationTime?.split("T")[0]}
             </p>
-            {dbUser?.bio && (
-              <p className="text-neutral-300 text-sm mt-2">{dbUser.bio}</p>
+            {typedDbUser?.bio && (
+              <p className="text-neutral-300 text-sm mt-2">{typedDbUser.bio}</p>
             )}
           </div>
         </div>
@@ -401,7 +283,7 @@ export default function ProfilePage() {
                                     ? `${BASE_IMAGE_URL}/w342${movie.poster_path}`
                                     : "/movie-icon.png"
                                 }
-                                alt={movie.title}
+                                alt={movie.title ?? ""}
                                 className="w-full h-auto rounded-lg object-cover hover:opacity-80 transition-opacity"
                               />
                               <p className="mt-1 text-xs font-medium text-neutral-300 text-center line-clamp-1">
@@ -428,7 +310,7 @@ export default function ProfilePage() {
                                     ? `${BASE_IMAGE_URL}/w342${show.poster_path}`
                                     : "/tv-icon.png"
                                 }
-                                alt={show.name}
+                                alt={show.name ?? ""}
                                 className="w-full h-auto rounded-lg object-cover hover:opacity-80 transition-opacity"
                               />
                               <p className="mt-1 text-xs font-medium text-neutral-300 text-center line-clamp-1">
@@ -500,7 +382,7 @@ export default function ProfilePage() {
                                     ? `${BASE_IMAGE_URL}/w342${movie.poster_path}`
                                     : "/movie-icon.png"
                                 }
-                                alt={movie.title}
+                                alt={movie.title ?? ""}
                                 className="w-full h-auto rounded-lg object-cover hover:opacity-80 transition-opacity"
                               />
                               <p className="mt-1 text-xs font-medium text-neutral-300 text-center line-clamp-1">
@@ -527,7 +409,7 @@ export default function ProfilePage() {
                                     ? `${BASE_IMAGE_URL}/w342${show.poster_path}`
                                     : "/tv-icon.png"
                                 }
-                                alt={show.name}
+                                alt={show.name ?? ""}
                                 className="w-full h-auto rounded-lg object-cover hover:opacity-80 transition-opacity"
                               />
                               <p className="mt-1 text-xs font-medium text-neutral-300 text-center line-clamp-1">
@@ -597,7 +479,7 @@ export default function ProfilePage() {
             >
               Friends ({friends.length})
             </button>
-            {dbUser?.profile_visibility === "public" && (
+            {typedDbUser?.profile_visibility === "public" && (
               <button
                 onClick={() => setFriendsTab("followers")}
                 className={`px-3 py-2 text-sm font-medium border-b-2 transition-colors ${friendsTab === "followers" ? "border-primary-500 text-primary-400" : "border-transparent text-neutral-400 hover:text-neutral-200"}`}
@@ -632,16 +514,12 @@ export default function ProfilePage() {
           {friendsTab === "friends" && (
             <FriendsList
               friends={friends}
-              onFriendRemoved={(friendId) =>
-                setFriends((prev) =>
-                  prev.filter((f) => f.friend.id !== friendId),
-                )
-              }
+              onFriendRemoved={() => {}}
               onFindFriends={() => setFriendsTab("add")}
             />
           )}
           {friendsTab === "followers" &&
-            dbUser?.profile_visibility === "public" && (
+            typedDbUser?.profile_visibility === "public" && (
               <div className="space-y-2">
                 {followers.length === 0 ? (
                   <p className="text-neutral-400 text-sm">No followers yet.</p>
@@ -659,10 +537,10 @@ export default function ProfilePage() {
                       </Link>
                       <button
                         onClick={() => addBack(follower)}
-                        disabled={addingBack === follower.id}
+                        disabled={addingBackUsername === follower.username}
                         className="text-xs bg-primary-600 hover:bg-primary-500 disabled:opacity-50 text-white px-3 py-1 rounded transition-colors"
                       >
-                        {addingBack === follower.id ? "Adding…" : "Add back"}
+                        {addingBackUsername === follower.username ? "Adding…" : "Add back"}
                       </button>
                     </div>
                   ))
@@ -673,31 +551,14 @@ export default function ProfilePage() {
             <FriendRequests
               incoming={incoming}
               outgoing={outgoing}
-              onResponded={(friendshipId, accepted, req) => {
-                setIncoming((prev) =>
-                  prev.filter((r) => r.friendship_id !== friendshipId),
-                );
-                if (accepted) {
-                  setFriends((prev) => [
-                    ...prev,
-                    { friendship_id: friendshipId, friend: req.from_user },
-                  ]);
-                }
-              }}
-              onCancelled={(friendshipId) =>
-                setOutgoing((prev) =>
-                  prev.filter((r) => r.friendship_id !== friendshipId),
-                )
-              }
+              onResponded={() => {}}
+              onCancelled={() => {}}
             />
           )}
           {friendsTab === "add" && (
             <FriendSearch
               friendIds={new Set(friends.map((f) => f.friend.id))}
-              onRequestSent={() => {
-                fetchFriends();
-                setFriendsTab("requests");
-              }}
+              onRequestSent={() => setFriendsTab("requests")}
             />
           )}
         </div>

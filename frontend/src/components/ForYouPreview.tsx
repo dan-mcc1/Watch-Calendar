@@ -1,24 +1,12 @@
-// frontend/src/components/ForYouPreview.tsx
-import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { apiFetch } from "../utils/apiFetch";
 import MediaList from "./MediaList";
 import type { Movie, Show } from "../types/calendar";
+import { useForYouPreview } from "../hooks/api/useRecommendations";
 
 export default function ForYouPreview() {
-  const [movies, setMovies] = useState<Movie[]>([]);
-  const [shows, setShows] = useState<Show[]>([]);
-
-  useEffect(() => {
-    apiFetch("/recommendations/for-you")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data) => {
-        if (!data) return;
-        setMovies((data.movies ?? []).slice(0, 4));
-        setShows((data.shows ?? []).slice(0, 4));
-      })
-      .catch(() => {});
-  }, []);
+  const { data } = useForYouPreview();
+  const movies = ((data?.movies ?? []) as Movie[]).slice(0, 4);
+  const shows = ((data?.shows ?? []) as Show[]).slice(0, 4);
 
   if (!movies.length && !shows.length) return null;
 

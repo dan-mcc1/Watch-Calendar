@@ -12,7 +12,7 @@ from app.services.omdb_service import get_omdb_scores
 router = APIRouter()
 
 
-@router.get("/")
+@router.get("")
 @limiter.limit("60/minute")
 def get_reviews(
     request: Request,
@@ -85,7 +85,7 @@ def get_external_scores(
     return get_omdb_scores(imdb_id)
 
 
-@router.post("/")
+@router.post("")
 def add_or_update_review(
     content_type: str = Body(...),
     content_id: int = Body(...),
@@ -144,7 +144,7 @@ def add_or_update_review(
     return _with_rating(review, user_obj)
 
 
-@router.delete("/")
+@router.delete("")
 def delete_review(
     content_type: str = Body(...),
     content_id: int = Body(...),

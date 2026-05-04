@@ -1,15 +1,9 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { Show, Movie } from "../types/calendar";
 import { useNavigate } from "react-router-dom";
-import { apiFetch } from "../utils/apiFetch";
-import { useAuthUser } from "../hooks/useAuthUser";
 import MediaCard from "../components/MediaCard";
 import { usePageTitle } from "../hooks/usePageTitle";
-import {
-  getCachedWatchlist,
-  setCachedWatchlist,
-  clearWatchlistCache,
-} from "../utils/watchlistCache";
+import { useWatchlist, useRemoveFromList } from "../hooks/api/useLists";
 
 type TabType = "all" | "movies" | "tv";
 type SortType =
@@ -74,66 +68,24 @@ function applySort<T extends Movie | (Show & { added_at?: string | null })>(
 export default function Watchlist() {
   usePageTitle("Watchlist");
   const navigate = useNavigate();
-  const user = useAuthUser();
-  const [results, setResults] = useState<{ movies: Movie[]; shows: Show[] }>({
-    movies: [],
-    shows: [],
-  });
-  const [loading, setLoading] = useState(true);
+  const { data, isPending: loading } = useWatchlist();
+  const results = data ?? { movies: [], shows: [] };
+  const removeFromList = useRemoveFromList();
   const [activeTab, setActiveTab] = useState<TabType>("all");
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<SortType>("default");
 
   async function onRemove(type: "tv" | "movie", content_id: number) {
     try {
-      const res = await apiFetch("/watchlist/remove", {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content_type: type, content_id }),
+      await removeFromList.mutateAsync({
+        list: "watchlist",
+        contentType: type,
+        contentId: content_id,
       });
-      if (!res.ok) throw new Error("Failed to remove item");
-      setResults((prev) => ({
-        movies:
-          type === "movie"
-            ? prev.movies.filter((m) => m.id !== content_id)
-            : prev.movies,
-        shows:
-          type === "tv"
-            ? prev.shows.filter((s) => s.id !== content_id)
-            : prev.shows,
-      }));
-      clearWatchlistCache();
     } catch (err) {
       console.error(err);
     }
   }
-
-  useEffect(() => {
-    if (!user) return;
-    const cached = getCachedWatchlist(user.uid);
-    if (cached) {
-      setResults(cached);
-      setLoading(false);
-      return;
-    }
-    (async () => {
-      try {
-        const res = await apiFetch("/watchlist");
-        if (!res.ok) throw new Error("Failed to fetch");
-        const data = await res.json();
-        const watchlist = {
-          movies: data.movies ?? [],
-          shows: data.shows ?? [],
-        };
-        setResults(watchlist);
-        setCachedWatchlist(user.uid, watchlist);
-      } catch (err) {
-        console.error(err);
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, [user]);
 
   const totalCount = results.movies.length + results.shows.length;
   const showMovies = activeTab === "all" || activeTab === "movies";

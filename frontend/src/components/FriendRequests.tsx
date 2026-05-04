@@ -1,11 +1,14 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { apiFetch } from "../utils/apiFetch";
+import {
+  useRespondToFriendRequest,
+  useCancelFriendRequest,
+} from "../hooks/api/useFriends";
 
 interface RequestUser {
   id: string;
   username: string;
-  email: string;
+  email?: string;
 }
 
 interface IncomingRequest {
@@ -37,37 +40,29 @@ export default function FriendRequests({
   onResponded,
   onCancelled,
 }: Props) {
-  const [responding, setResponding] = useState<number | null>(null);
-  const [cancelling, setCancelling] = useState<number | null>(null);
+  const [respondingId, setRespondingId] = useState<number | null>(null);
+  const [cancellingId, setCancellingId] = useState<number | null>(null);
+  const respondMutation = useRespondToFriendRequest();
+  const cancelMutation = useCancelFriendRequest();
 
   async function respond(friendshipId: number, accept: boolean) {
-    setResponding(friendshipId);
+    setRespondingId(friendshipId);
     const req = incoming.find((r) => r.friendship_id === friendshipId)!;
     try {
-      const res = await apiFetch("/friends/respond", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ friendship_id: friendshipId, accept }),
-      });
-      if (res.ok) {
-        window.dispatchEvent(new CustomEvent("friend-request-handled"));
-        window.dispatchEvent(new CustomEvent("friends-updated"));
-        if (accept) window.dispatchEvent(new CustomEvent("activity-updated"));
-        onResponded(friendshipId, accept, req);
-      }
+      await respondMutation.mutateAsync({ friendshipId, accept });
+      onResponded(friendshipId, accept, req);
     } finally {
-      setResponding(null);
+      setRespondingId(null);
     }
   }
 
   async function cancel(friendshipId: number) {
-    setCancelling(friendshipId);
+    setCancellingId(friendshipId);
     try {
-      await apiFetch(`/friends/cancel/${friendshipId}`, { method: "DELETE" });
-      window.dispatchEvent(new CustomEvent("friends-updated"));
+      await cancelMutation.mutateAsync(friendshipId);
       onCancelled(friendshipId);
     } finally {
-      setCancelling(null);
+      setCancellingId(null);
     }
   }
 
@@ -99,14 +94,14 @@ export default function FriendRequests({
                 <div className="flex gap-2">
                   <button
                     onClick={() => respond(req.friendship_id, true)}
-                    disabled={responding === req.friendship_id}
+                    disabled={respondingId === req.friendship_id}
                     className="text-sm bg-success-600 hover:bg-success-500 disabled:opacity-50 text-white px-3 py-1 rounded"
                   >
                     Accept
                   </button>
                   <button
                     onClick={() => respond(req.friendship_id, false)}
-                    disabled={responding === req.friendship_id}
+                    disabled={respondingId === req.friendship_id}
                     className="text-sm bg-neutral-600 hover:bg-neutral-500 disabled:opacity-50 text-neutral-200 px-3 py-1 rounded"
                   >
                     Decline
@@ -137,10 +132,10 @@ export default function FriendRequests({
                 </Link>
                 <button
                   onClick={() => cancel(req.friendship_id)}
-                  disabled={cancelling === req.friendship_id}
+                  disabled={cancellingId === req.friendship_id}
                   className="text-sm text-neutral-400 hover:text-error-500 disabled:opacity-50"
                 >
-                  {cancelling === req.friendship_id ? "Cancelling…" : "Cancel"}
+                  {cancellingId === req.friendship_id ? "Cancelling…" : "Cancel"}
                 </button>
               </li>
             ))}

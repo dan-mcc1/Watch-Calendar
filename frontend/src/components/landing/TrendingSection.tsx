@@ -1,25 +1,11 @@
-import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { apiFetch } from "../../utils/apiFetch";
 import MediaList from "../MediaList";
-import type { Movie, Show } from "../../types/calendar";
+import { useTrendingMulti } from "../../hooks/api/useSearch";
 
 export default function TrendingSection() {
-  const [movies, setMovies] = useState<Movie[]>([]);
-  const [shows, setShows] = useState<Show[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    apiFetch("/search/multi/trending")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data) => {
-        if (!data) return;
-        setMovies(data.movies ?? []);
-        setShows(data.shows ?? []);
-      })
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, []);
+  const { data, isPending: loading } = useTrendingMulti();
+  const movies = data?.movies ?? [];
+  const shows = data?.shows ?? [];
 
   if (loading)
     return (

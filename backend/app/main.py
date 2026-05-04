@@ -170,7 +170,7 @@ async def lifespan(app: FastAPI):
     vote_task.cancel()
 
 
-app = FastAPI(title="ReleaseRadar API", lifespan=lifespan)
+app = FastAPI(title="ReleaseRadar API", lifespan=lifespan, redirect_slashes=False)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 

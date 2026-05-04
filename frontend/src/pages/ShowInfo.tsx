@@ -1,5 +1,4 @@
 import { useParams } from "react-router-dom";
-import { useState } from "react";
 import type { Show } from "../types/calendar";
 import type { MediaExternalIds, MediaVideo } from "../types/media";
 import { parseLocalDate, formatLocalDate } from "../utils/date";
@@ -37,8 +36,6 @@ export default function ShowInfo() {
   const user = useAuthUser();
   usePageTitle(show?.name);
 
-  const [episodeRefreshKey, setEpisodeRefreshKey] = useState(0);
-  const [watchButtonRefreshKey, setWatchButtonRefreshKey] = useState(0);
 
   if (loading)
     return (
@@ -77,9 +74,7 @@ export default function ShowInfo() {
               contentId={show.id}
               initialStatus={initialStatus}
               initialRating={initialRating}
-              onStatusChange={() => setEpisodeRefreshKey((k) => k + 1)}
-              refreshKey={watchButtonRefreshKey}
-            />
+              />
           )}
           {user && <FavoriteButton contentType="tv" contentId={show.id} />}
           {user && (
@@ -175,8 +170,6 @@ export default function ShowInfo() {
           <SeasonInfo
             showId={show.id}
             seasons={show.seasons}
-            refreshKey={episodeRefreshKey}
-            onEpisodeToggle={() => setWatchButtonRefreshKey((k) => k + 1)}
           />
         )}
 

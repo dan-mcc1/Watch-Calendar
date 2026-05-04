@@ -1,26 +1,15 @@
-import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { apiFetch } from "../../utils/apiFetch";
 import MediaList from "../MediaList";
-import type { Movie } from "../../types/calendar";
+import { useComingSoon } from "../../hooks/api/useSearch";
 
 export default function ComingSoonSection() {
-  const [movies, setMovies] = useState<Movie[]>([]);
-  const [loading, setLoading] = useState(true);
+  const today = new Date();
+  const minDate = today.toISOString().split("T")[0];
+  const nextMonth = new Date(today);
+  nextMonth.setMonth(nextMonth.getMonth() + 1);
+  const maxDate = nextMonth.toISOString().split("T")[0];
 
-  useEffect(() => {
-    const today = new Date();
-    const min_date = today.toISOString().split("T")[0];
-    const nextMonth = new Date(today);
-    nextMonth.setMonth(nextMonth.getMonth() + 1);
-    const max_date = nextMonth.toISOString().split("T")[0];
-
-    apiFetch(`/search/movie/upcoming?${new URLSearchParams({ min_date, max_date })}`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data) => { if (data) setMovies(data.results ?? []); })
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, []);
+  const { data: movies = [], isPending: loading } = useComingSoon(minDate, maxDate);
 
   if (loading)
     return (

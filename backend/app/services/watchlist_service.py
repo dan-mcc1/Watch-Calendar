@@ -1,6 +1,6 @@
 # app/services/watchlist_service.py
 from sqlalchemy.orm import Session, selectinload
-from sqlalchemy import and_
+from sqlalchemy import and_, select, exists, literal, union_all
 from datetime import datetime
 from app.models.watchlist import Watchlist
 from app.models.watched import Watched
@@ -14,7 +14,6 @@ from app.models.provider import Provider, ShowProvider, MovieProvider
 from app.models.season import Season
 from app.services.tmdb_movies import fetch_movie_from_tmdb
 from app.services.tmdb_tv import fetch_show_from_tmdb
-from app.services.episode_service import sync_show_episodes_background
 from app.services.activity_service import log_activity
 from app.services.tvmaze_service import fetch_show_air_time
 from sqlalchemy import text
@@ -268,17 +267,124 @@ def get_theatrical_release_date(movie_data: dict) -> str | None:
 # -------------------------
 
 
+def ensure_movie_in_db(db: Session, content_id: int, already_tracked: bool) -> Movie:
+    """
+    Return the Movie row for content_id, creating it from TMDB if absent.
+    Increments tracking_count when the row already exists and isn't tracked elsewhere.
+    """
+    movie = db.query(Movie).filter_by(id=content_id).first()
+    if movie:
+        if not already_tracked:
+            movie.tracking_count += 1
+        return movie
+
+    movie_data = fetch_movie_from_tmdb(content_id, "watch/providers,release_dates,images")
+    if not movie_data or not movie_data.get("title"):
+        raise ValueError("Cannot add movie without a title")
+
+    us_providers = movie_data.get("watch/providers", {}).get("results", {}).get("US", {})
+    theatrical_release_date = get_theatrical_release_date(movie_data)
+    all_logos = movie_data.get("images", {}).get("logos", [])
+    english_logos = [l for l in all_logos if l.get("iso_639_1") == "en"]
+    logo = english_logos[0]["file_path"] if english_logos else None
+
+    movie = Movie(
+        id=movie_data["id"],
+        imdb_id=movie_data.get("imdb_id"),
+        backdrop_path=movie_data.get("backdrop_path"),
+        logo_path=logo,
+        budget=movie_data.get("budget"),
+        homepage=movie_data.get("homepage"),
+        tagline=movie_data.get("tagline"),
+        poster_path=movie_data.get("poster_path"),
+        overview=movie_data.get("overview"),
+        release_date=theatrical_release_date,
+        revenue=movie_data.get("revenue"),
+        runtime=movie_data.get("runtime"),
+        status=movie_data.get("status"),
+        title=movie_data.get("title"),
+        tracking_count=1,
+        vote_average=movie_data.get("vote_average"),
+    )
+    db.add(movie)
+    db.flush()
+    _upsert_genres(db, movie_data.get("genres", []), MovieGenre, movie_id=movie.id)
+    _upsert_providers(db, us_providers, MovieProvider, movie_id=movie.id)
+    return movie
+
+
+def ensure_show_in_db(db: Session, content_id: int, already_tracked: bool) -> Show:
+    """
+    Return the Show row for content_id, creating it from TMDB if absent.
+    Increments tracking_count when the row already exists and isn't tracked elsewhere.
+    """
+    show = db.query(Show).filter_by(id=content_id).first()
+    if show:
+        if not already_tracked:
+            show.tracking_count += 1
+        return show
+
+    show_data = fetch_show_from_tmdb(content_id, "watch/providers,images")
+    if not show_data or not show_data.get("name"):
+        raise ValueError("Cannot add show without a name")
+
+    us_providers = show_data.get("watch/providers", {}).get("results", {}).get("US", {})
+    all_logos = show_data.get("images", {}).get("logos", [])
+    english_logos = [l for l in all_logos if l.get("iso_639_1") == "en"]
+    logo = english_logos[0]["file_path"] if english_logos else None
+    air_time, air_timezone = fetch_show_air_time(show_data["name"])
+
+    show = Show(
+        id=show_data["id"],
+        name=show_data["name"],
+        backdrop_path=show_data.get("backdrop_path"),
+        logo_path=logo,
+        last_air_date=show_data.get("last_air_date"),
+        homepage=show_data.get("homepage"),
+        in_production=show_data.get("in_production"),
+        number_of_seasons=show_data.get("number_of_seasons"),
+        number_of_episodes=show_data.get("number_of_episodes"),
+        status=show_data.get("status"),
+        tagline=show_data.get("tagline"),
+        overview=show_data.get("overview"),
+        type=show_data.get("type"),
+        first_air_date=show_data.get("first_air_date"),
+        poster_path=show_data.get("poster_path"),
+        tracking_count=1,
+        air_time=air_time,
+        air_timezone=air_timezone,
+        vote_average=show_data.get("vote_average"),
+    )
+    db.add(show)
+    db.flush()
+    _upsert_genres(db, show_data.get("genres", []), ShowGenre, show_id=show.id)
+    _upsert_providers(db, us_providers, ShowProvider, show_id=show.id)
+    _upsert_seasons_for_show(db, show, show_data.get("seasons", []))
+    return show
+
+
+def _is_tracked_on_any(
+    db: Session, user_id: str, content_type: str, content_id: int, *models
+) -> bool:
+    """Return True if the item exists on ANY of the given list models — single UNION ALL query."""
+    subqs = [
+        select(literal(1))
+        .select_from(model)
+        .where(
+            model.user_id == user_id,
+            model.content_type == content_type,
+            model.content_id == content_id,
+        )
+        for model in models
+    ]
+    return db.execute(select(exists(union_all(*subqs).subquery()))).scalar() or False
+
+
 def _is_on_other_list(
     db: Session, user_id: str, content_type: str, content_id: int
 ) -> bool:
     """Return True if the item exists on CurrentlyWatching or Watched."""
-    return any(
-        db.query(t)
-        .filter_by(user_id=user_id, content_type=content_type, content_id=content_id)
-        .first()
-        is not None
-        for t in (CurrentlyWatching, Watched)
-    )
+    return _is_tracked_on_any(db, user_id, content_type, content_id, CurrentlyWatching, Watched)
 
 
 def add_to_watchlist(db: Session, user_id: str, content_type: str, content_id: int):
@@ -305,118 +411,14 @@ def add_to_watchlist(db: Session, user_id: str, content_type: str, content_id: i
     db.add(entry)
 
     if content_type == "movie":
-        movie = db.query(Movie).filter_by(id=content_id).first()
-        if movie:
-            if not already_tracked:
-                movie.tracking_count += 1
-        else:
-            movie_data = fetch_movie_from_tmdb(
-                content_id, "watch/providers,release_dates,images"
-            )
-            if not movie_data or not movie_data.get("title"):
-                raise ValueError("Cannot add movie without a title")
-            us_providers = (
-                movie_data.get("watch/providers", {}).get("results", {}).get("US", {})
-            )
-            theatrical_release_date = get_theatrical_release_date(movie_data)
-            all_logos = movie_data.get("images", {}).get("logos", [])
-            english_logos = [l for l in all_logos if l.get("iso_639_1") == "en"]
-            logo = english_logos[0]["file_path"] if english_logos else None
-            movie = Movie(
-                id=movie_data["id"],
-                imdb_id=movie_data.get("imdb_id"),
-                backdrop_path=movie_data.get("backdrop_path"),
-                budget=movie_data.get("budget"),
-                homepage=movie_data.get("homepage"),
-                tagline=movie_data.get("tagline"),
-                poster_path=movie_data.get("poster_path"),
-                overview=movie_data.get("overview"),
-                release_date=theatrical_release_date,
-                revenue=movie_data.get("revenue"),
-                runtime=movie_data.get("runtime"),
-                status=movie_data.get("status"),
-                title=movie_data.get("title"),
-                logo_path=logo,
-                tracking_count=1,
-                vote_average=movie_data.get("vote_average"),
-            )
-            db.add(movie)
-            db.flush()
-            _upsert_genres(
-                db, movie_data.get("genres", []), MovieGenre, movie_id=movie.id
-            )
-            _upsert_providers(db, us_providers, MovieProvider, movie_id=movie.id)
-
+        media = ensure_movie_in_db(db, content_id, already_tracked)
+        log_activity(db, user_id, "want_to_watch", content_type, content_id, media.title, media.poster_path)
     elif content_type == "tv":
-        show = db.query(Show).filter_by(id=content_id).first()
-        if show:
-            if not already_tracked:
-                show.tracking_count += 1
-        else:
-            show_data = fetch_show_from_tmdb(content_id, "watch/providers,images")
-            if not show_data or not show_data.get("name"):
-                raise ValueError("Cannot add show without a name")
-            us_providers = (
-                show_data.get("watch/providers", {}).get("results", {}).get("US", {})
-            )
-            all_logos = show_data.get("images", {}).get("logos", [])
-            english_logos = [l for l in all_logos if l.get("iso_639_1") == "en"]
-            logo = english_logos[0]["file_path"] if english_logos else None
-            air_time, air_timezone = fetch_show_air_time(show_data["name"])
-            show = Show(
-                id=show_data["id"],
-                name=show_data["name"],
-                backdrop_path=show_data.get("backdrop_path"),
-                last_air_date=show_data.get("last_air_date"),
-                homepage=show_data.get("homepage"),
-                in_production=show_data.get("in_production"),
-                number_of_seasons=show_data.get("number_of_seasons"),
-                number_of_episodes=show_data.get("number_of_episodes"),
-                status=show_data.get("status"),
-                tagline=show_data.get("tagline"),
-                overview=show_data.get("overview"),
-                type=show_data.get("type"),
-                first_air_date=show_data.get("first_air_date"),
-                poster_path=show_data.get("poster_path"),
-                logo_path=logo,
-                tracking_count=1,
-                air_time=air_time,
-                air_timezone=air_timezone,
-                vote_average=show_data.get("vote_average"),
-            )
-            db.add(show)
-            db.flush()
-            _upsert_genres(db, show_data.get("genres", []), ShowGenre, show_id=show.id)
-            _upsert_providers(db, us_providers, ShowProvider, show_id=show.id)
-            _upsert_seasons_for_show(db, show, show_data.get("seasons", []))
-
-    # Log activity before committing — reuse already-fetched objects
-    if content_type == "movie":
-        log_activity(
-            db,
-            user_id,
-            "want_to_watch",
-            content_type,
-            content_id,
-            movie.title if movie else None,
-            movie.poster_path if movie else None,
-        )
-    elif content_type == "tv":
-        log_activity(
-            db,
-            user_id,
-            "want_to_watch",
-            content_type,
-            content_id,
-            show.name if show else None,
-            show.poster_path if show else None,
-        )
+        media = ensure_show_in_db(db, content_id, already_tracked)
+        log_activity(db, user_id, "want_to_watch", content_type, content_id, media.name, media.poster_path)
 
     db.commit()
     db.refresh(entry)
-
-    if content_type == "tv":
-        sync_show_episodes_background(content_id)
 
     return entry
 
@@ -465,7 +467,7 @@ def remove_from_watchlist(
 
 
 def _show_query_options():
-    """Shared selectinload options for loading show relationships."""
+    """Full show relationships — for detail pages."""
     return [
         selectinload(Show.seasons),
         selectinload(Show.genres),
@@ -474,27 +476,76 @@ def _show_query_options():
 
 
 def _movie_query_options():
-    """Shared selectinload options for loading movie relationships."""
+    """Full movie relationships — for detail pages."""
     return [
         selectinload(Movie.genres),
         selectinload(Movie.movie_providers).selectinload(MovieProvider.provider),
     ]
 
 
+def _show_query_options_list():
+    """Lightweight show options for list views — genres only, no seasons or providers."""
+    return [selectinload(Show.genres)]
+
+
+def _movie_query_options_list():
+    """Lightweight movie options for list views — genres only, no providers."""
+    return [selectinload(Movie.genres)]
+
+
+def serialize_show_list(show):
+    """Serialize a show for list views — omits seasons and providers."""
+    return {
+        "id": show.id,
+        "name": show.name,
+        "backdrop_path": show.backdrop_path,
+        "logo_path": show.logo_path,
+        "first_air_date": show.first_air_date,
+        "last_air_date": show.last_air_date,
+        "in_production": show.in_production,
+        "number_of_seasons": show.number_of_seasons,
+        "number_of_episodes": show.number_of_episodes,
+        "overview": show.overview,
+        "poster_path": show.poster_path,
+        "status": show.status,
+        "tracking_count": show.tracking_count,
+        "vote_average": show.vote_average,
+        "genres": [{"id": g.id, "name": g.name} for g in show.genres],
+    }
+
+
+def serialize_movie_list(movie):
+    """Serialize a movie for list views — omits providers."""
+    return {
+        "id": movie.id,
+        "backdrop_path": movie.backdrop_path,
+        "logo_path": movie.logo_path,
+        "overview": movie.overview,
+        "poster_path": movie.poster_path,
+        "release_date": movie.release_date,
+        "runtime": movie.runtime,
+        "status": movie.status,
+        "title": movie.title,
+        "tracking_count": movie.tracking_count,
+        "vote_average": movie.vote_average,
+        "genres": [{"id": g.id, "name": g.name} for g in movie.genres],
+    }
+
+
 def _get_watchlist_items(db: Session, user_id: str, content_type: str):
     if content_type == "tv":
         model, options, content_id_col, serialize = (
             Show,
-            _show_query_options(),
+            _show_query_options_list(),
             Show.id,
-            serialize_show,
+            serialize_show_list,
         )
     else:
         model, options, content_id_col, serialize = (
             Movie,
-            _movie_query_options(),
+            _movie_query_options_list(),
             Movie.id,
-            serialize_movie,
+            serialize_movie_list,
         )
 
     rows = (

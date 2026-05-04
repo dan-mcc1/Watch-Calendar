@@ -1,9 +1,7 @@
-import { useEffect, useState, useCallback } from "react";
+import { useState } from "react";
 import { BASE_IMAGE_URL } from "../constants";
 import { Link } from "react-router-dom";
-import { useAuthUser } from "../hooks/useAuthUser";
-import { apiFetch } from "../utils/apiFetch";
-import { useEventRefetch } from "../hooks/useEventRefetch";
+import { useFriendsActivity } from "../hooks/api/useActivity";
 
 interface ActivityItem {
   id: number;
@@ -34,28 +32,11 @@ function timeAgo(isoString: string) {
 }
 
 export default function ActivityFeed() {
-  const user = useAuthUser();
-  const [items, setItems] = useState<ActivityItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { data, isLoading } = useFriendsActivity();
+  const items = (data as ActivityItem[] | undefined) ?? [];
   const [open, setOpen] = useState(false);
 
-  const fetchActivity = useCallback(() => {
-    if (!user) { setLoading(false); return; }
-    apiFetch("/friends/activity")
-      .then((res) => { if (res.ok) return res.json(); })
-      .then((data) => { if (data) setItems(data); })
-      .catch(console.error)
-      .finally(() => setLoading(false));
-  }, [user]);
-
-  useEffect(() => {
-    setLoading(true);
-    fetchActivity();
-  }, [fetchActivity]);
-
-  useEventRefetch("activity-updated", fetchActivity);
-
-  if (loading || items.length === 0) return null;
+  if (isLoading || items.length === 0) return null;
 
   return (
     <div className="border-b border-neutral-700 bg-neutral-800/60">

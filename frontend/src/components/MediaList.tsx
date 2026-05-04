@@ -2,11 +2,10 @@ import { BASE_IMAGE_URL } from "../constants";
 import { Link } from "react-router-dom";
 import { Movie, Show, Person, CollectionResult } from "../types/calendar";
 import { parseLocalDate } from "../utils/date";
-import { useState, useEffect, useMemo } from "react";
+import { useState, useMemo } from "react";
 import { useAuthUser } from "../hooks/useAuthUser";
-import { apiFetch } from "../utils/apiFetch";
 import WatchButton, { WatchStatus } from "./WatchButton";
-import { getCachedStatuses, mergeCachedStatuses } from "../utils/statusCache";
+import { useBulkWatchStatus } from "../hooks/api/useWatchStatus";
 
 interface MediaListProps {
   results: {
@@ -363,60 +362,18 @@ export default function MediaList({
   const [visibleCounts, setVisibleCounts] = useState<Record<string, number>>(
     {},
   );
-  // undefined = not yet fetched, {} = fetched (user logged out or no items)
-  const [statusMap, setStatusMap] = useState<StatusMap | undefined>(undefined);
   const isSignedIn = !!user;
 
   const movies = useMemo(() => results.movies ?? [], [results.movies]);
   const shows = useMemo(() => results.shows ?? [], [results.shows]);
   const people = results.people ?? [];
 
-  // Fetch all statuses in one request instead of one per WatchButton.
-  // Wait for auth state before fetching so currentUser is available.
-  useEffect(() => {
-    if (!showWatchButton) {
-      setStatusMap((prev) => prev ?? {});
-      return;
-    }
+  const items = useMemo(() => [
+    ...movies.map((m) => ({ content_type: "movie" as const, content_id: m.id })),
+    ...shows.map((s) => ({ content_type: "tv" as const, content_id: s.id })),
+  ], [movies, shows]);
 
-    const items = [
-      ...movies.map((m) => ({ content_type: "movie", content_id: m.id })),
-      ...shows.map((s) => ({ content_type: "tv", content_id: s.id })),
-    ];
-
-    if (!user || !items.length) {
-      setStatusMap((prev) => prev ?? {});
-      return;
-    }
-    const { cached, missing } = getCachedStatuses(user.uid, items);
-    if (!missing.length) {
-      setStatusMap(
-        cached as Record<
-          string,
-          { status: WatchStatus; rating: number | null }
-        >,
-      );
-      return;
-    }
-    apiFetch("/watchlist/status/bulk", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(missing),
-    })
-      .then((r) => (r.ok ? r.json() : {}))
-      .then((data) => {
-        mergeCachedStatuses(user.uid, data);
-        setStatusMap({ ...cached, ...data } as Record<
-          string,
-          { status: WatchStatus; rating: number | null }
-        >);
-      })
-      .catch(() =>
-        setStatusMap((prev) =>
-          prev ?? (cached as Record<string, { status: WatchStatus; rating: number | null }>)
-        ),
-      );
-  }, [movies, shows, showWatchButton, user]);
+  const { data: statusMap } = useBulkWatchStatus(showWatchButton ? items : []);
 
   if (
     movies.length === 0 &&

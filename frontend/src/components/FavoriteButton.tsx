@@ -1,6 +1,5 @@
-import { useState, useEffect } from "react";
 import { useAuthUser } from "../hooks/useAuthUser";
-import { apiFetch } from "../utils/apiFetch";
+import { useFavoriteStatus, useToggleFavorite } from "../hooks/api/useLists";
 
 interface FavoriteButtonProps {
   contentType: "movie" | "tv";
@@ -9,35 +8,17 @@ interface FavoriteButtonProps {
 
 export default function FavoriteButton({ contentType, contentId }: FavoriteButtonProps) {
   const user = useAuthUser();
-  const [favorited, setFavorited] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const { data, isLoading } = useFavoriteStatus(contentType, contentId);
+  const toggleMutation = useToggleFavorite();
 
-  useEffect(() => {
-    if (!user) { setLoading(false); return; }
-    apiFetch(`/favorites/status?content_type=${contentType}&content_id=${contentId}`)
-      .then((r) => r.json())
-      .then((data) => setFavorited(data.favorited ?? false))
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, [contentType, contentId, user]);
+  const favorited = data?.favorited ?? false;
 
-  async function toggle() {
+  function toggle() {
     if (!user) return;
-    const next = !favorited;
-    setFavorited(next);
-
-    try {
-      await apiFetch(`/favorites/${next ? "add" : "remove"}`, {
-        method: next ? "POST" : "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content_type: contentType, content_id: contentId }),
-      });
-    } catch {
-      setFavorited(!next); // revert on error
-    }
+    toggleMutation.mutate({ contentType, contentId, favorited });
   }
 
-  if (loading) return null;
+  if (isLoading) return null;
 
   return (
     <button

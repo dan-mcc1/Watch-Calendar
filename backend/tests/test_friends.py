@@ -78,7 +78,7 @@ class TestFriendRequestAcceptDecline:
     def test_accept_makes_friends(self, db):
         c1, c2, fid = self._make_pending(db)
         c2.patch("/friends/respond", json={"friendship_id": fid, "accept": True})
-        r = c1.get("/friends/")
+        r = c1.get("/friends")
         friends = r.json()
         assert any(f["friend"]["id"] == "test-uid-2" for f in friends)
 
@@ -90,7 +90,7 @@ class TestFriendRequestAcceptDecline:
     def test_decline_does_not_add_friend(self, db):
         c1, c2, fid = self._make_pending(db)
         c2.patch("/friends/respond", json={"friendship_id": fid, "accept": False})
-        r = c1.get("/friends/")
+        r = c1.get("/friends")
         assert r.json() == []
 
     def test_non_addressee_cannot_respond(self, db):
@@ -148,7 +148,7 @@ class TestFriendRemove:
     def test_remove_friend_bidirectional(self, db):
         c1, c2 = self._make_friends(db)
         c1.delete("/friends/remove/test-uid-2")
-        r = c2.get("/friends/")
+        r = c2.get("/friends")
         assert r.json() == []
 
     def test_remove_nonexistent_friend_graceful(self, client, db):

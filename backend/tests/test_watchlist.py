@@ -7,7 +7,6 @@ import pytest
 import json
 from tests.conftest import make_client
 
-
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
 
@@ -156,7 +155,7 @@ class TestWatchlistRemove:
 
 class TestWatchlistFetch:
     def test_fetch_empty(self, client, seed_users):
-        r = client.get("/watchlist/")
+        r = client.get("/watchlist")
         assert r.status_code == 200
         data = r.json()
         assert data["movies"] == []
@@ -164,7 +163,7 @@ class TestWatchlistFetch:
 
     def test_fetch_includes_added_movie(self, client, seed_movie):
         add_movie(client)
-        r = client.get("/watchlist/")
+        r = client.get("/watchlist")
         assert r.status_code == 200
         data = r.json()
         assert len(data["movies"]) == 1
@@ -172,7 +171,7 @@ class TestWatchlistFetch:
 
     def test_fetch_includes_added_show(self, client, seed_show):
         add_show(client)
-        r = client.get("/watchlist/")
+        r = client.get("/watchlist")
         data = r.json()
         assert len(data["shows"]) == 1
         assert data["shows"][0]["id"] == 1396
@@ -196,7 +195,7 @@ class TestWatchlistFetch:
             )
         db.commit()
 
-        r = client.get("/watchlist/")
+        r = client.get("/watchlist")
         assert r.status_code == 200
         assert len(r.json()["movies"]) == 5
 

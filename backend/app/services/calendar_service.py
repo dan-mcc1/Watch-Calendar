@@ -30,22 +30,36 @@ def get_calendar(
     - Movies from watchlist + watched + currently-watching, each annotated
       with is_watched.
     """
-    # ── TV shows ──────────────────────────────────────────────────────────────
-    watchlist_show_ids = {
-        row.content_id
-        for row in db.query(Watchlist.content_id)
-        .filter(Watchlist.user_id == user_id, Watchlist.content_type == "tv")
-        .all()
-    }
-    cw_show_ids = {
-        row.content_id
-        for row in db.query(CurrentlyWatching.content_id)
+    # ── Fetch all user list IDs in 3 queries (one per table) ─────────────────
+    watchlist_rows = (
+        db.query(Watchlist.content_id, Watchlist.content_type)
         .filter(
-            CurrentlyWatching.user_id == user_id,
-            CurrentlyWatching.content_type == "tv",
+            Watchlist.user_id == user_id,
+            Watchlist.content_type.in_(["tv", "movie"]),
         )
         .all()
+    )
+    watchlist_show_ids = {r.content_id for r in watchlist_rows if r.content_type == "tv"}
+    watchlist_movie_ids = {r.content_id for r in watchlist_rows if r.content_type == "movie"}
+
+    cw_rows = (
+        db.query(CurrentlyWatching.content_id, CurrentlyWatching.content_type)
+        .filter(
+            CurrentlyWatching.user_id == user_id,
+            CurrentlyWatching.content_type.in_(["tv", "movie"]),
+        )
+        .all()
+    )
+    cw_show_ids = {r.content_id for r in cw_rows if r.content_type == "tv"}
+    cw_movie_ids = {r.content_id for r in cw_rows if r.content_type == "movie"}
+
+    watched_movie_ids = {
+        row.content_id
+        for row in db.query(Watched.content_id)
+        .filter(Watched.user_id == user_id, Watched.content_type == "movie")
+        .all()
     }
+
     show_ids = list(watchlist_show_ids | cw_show_ids)
 
     tv_result = []
@@ -112,27 +126,6 @@ def get_calendar(
         ]
 
     # ── Movies ────────────────────────────────────────────────────────────────
-    watchlist_movie_ids = {
-        row.content_id
-        for row in db.query(Watchlist.content_id)
-        .filter(Watchlist.user_id == user_id, Watchlist.content_type == "movie")
-        .all()
-    }
-    watched_movie_ids = {
-        row.content_id
-        for row in db.query(Watched.content_id)
-        .filter(Watched.user_id == user_id, Watched.content_type == "movie")
-        .all()
-    }
-    cw_movie_ids = {
-        row.content_id
-        for row in db.query(CurrentlyWatching.content_id)
-        .filter(
-            CurrentlyWatching.user_id == user_id,
-            CurrentlyWatching.content_type == "movie",
-        )
-        .all()
-    }
     all_movie_ids = list(watchlist_movie_ids | watched_movie_ids | cw_movie_ids)
 
     movies_result = []

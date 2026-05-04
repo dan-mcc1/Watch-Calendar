@@ -111,11 +111,15 @@ class TestWatchedRemove:
         # add_to_watched for a show marks all episodes as watched automatically
         add_to_watched(client, "tv", 1396)
         db.expire_all()
-        rows_before = db.query(EpisodeWatched).filter_by(user_id="test-uid-1", show_id=1396).all()
+        rows_before = (
+            db.query(EpisodeWatched).filter_by(user_id="test-uid-1", show_id=1396).all()
+        )
         assert len(rows_before) > 0  # episodes were marked watched
         remove_from_watched(client, "tv", 1396)
         db.expire_all()
-        rows = db.query(EpisodeWatched).filter_by(user_id="test-uid-1", show_id=1396).all()
+        rows = (
+            db.query(EpisodeWatched).filter_by(user_id="test-uid-1", show_id=1396).all()
+        )
         assert rows == []
 
 
@@ -164,14 +168,14 @@ class TestWatchedRate:
 
 class TestWatchedFetch:
     def test_fetch_empty(self, client, seed_users):
-        r = client.get("/watched/")
+        r = client.get("/watched")
         assert r.status_code == 200
         data = r.json()
         assert data["movies"] == []
 
     def test_fetch_includes_movie(self, client, seed_movie):
         add_to_watched(client)
-        r = client.get("/watched/")
+        r = client.get("/watched")
         data = r.json()
         assert len(data["movies"]) == 1
         assert data["movies"][0]["id"] == 550
@@ -182,7 +186,7 @@ class TestWatchedFetch:
             "/watched/rate",
             json={"content_type": "movie", "content_id": 550, "rating": 7.5},
         )
-        r = client.get("/watched/")
+        r = client.get("/watched")
         assert r.json()["movies"][0]["user_rating"] == 7.5
 
     def test_fetch_returns_all_movies(self, client, db, seed_users):
@@ -203,7 +207,7 @@ class TestWatchedFetch:
             )
         db.commit()
 
-        r = client.get("/watched/")
+        r = client.get("/watched")
         assert r.status_code == 200
         assert len(r.json()["movies"]) == 7
 
@@ -214,13 +218,27 @@ class TestWatchedFetch:
         db.add(Movie(id=1, title="Rated", tracking_count=0))
         db.add(Movie(id=2, title="Unrated", tracking_count=0))
         db.flush()
-        db.add(Watched(user_id="test-uid-1", content_type="movie", content_id=1,
-                       watched_at=datetime.utcnow(), rating=7.0))
-        db.add(Watched(user_id="test-uid-1", content_type="movie", content_id=2,
-                       watched_at=datetime.utcnow(), rating=None))
+        db.add(
+            Watched(
+                user_id="test-uid-1",
+                content_type="movie",
+                content_id=1,
+                watched_at=datetime.utcnow(),
+                rating=7.0,
+            )
+        )
+        db.add(
+            Watched(
+                user_id="test-uid-1",
+                content_type="movie",
+                content_id=2,
+                watched_at=datetime.utcnow(),
+                rating=None,
+            )
+        )
         db.commit()
 
-        r = client.get("/watched/")
+        r = client.get("/watched")
         assert r.status_code == 200
         movies = r.json()["movies"]
         assert len(movies) == 2

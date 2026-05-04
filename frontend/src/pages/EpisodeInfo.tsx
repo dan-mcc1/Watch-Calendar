@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { BASE_IMAGE_URL } from "../constants";
-import { apiFetch } from "../utils/apiFetch";
-import { useAuthUser } from "../hooks/useAuthUser";
 import { usePageTitle } from "../hooks/usePageTitle";
+import { useQuery } from "@tanstack/react-query";
+import { queryKeys } from "../hooks/api/queryKeys";
+import { queryFetch } from "../hooks/api/queryFetch";
+import { useWatchedEpisodes, useToggleEpisode } from "../hooks/api/useEpisodes";
 
 interface CastMember {
   id: number;
@@ -126,79 +127,44 @@ export default function EpisodeInfo() {
     season: string;
     episode: string;
   }>();
-  const [data, setData] = useState<EpisodeData | null>(null);
-  const [showName, setShowName] = useState<string | null>(null);
-  const [showInProduction, setShowInProduction] = useState<boolean | null>(
-    null,
-  );
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [watched, setWatched] = useState(false);
-  const [toggling, setToggling] = useState(false);
-  usePageTitle(data ? `${data.name}` : "Episode");
 
-  const user = useAuthUser();
+  const episodeQuery = useQuery<EpisodeData>({
+    queryKey: queryKeys.episodeDetail(showId ?? "", season ?? "", episode ?? ""),
+    queryFn: () =>
+      queryFetch<EpisodeData>(`/tv/${showId}/season/${season}/episode/${episode}`),
+    enabled: !!showId && !!season && !!episode,
+  });
 
-  // Fetch episode details + show name in parallel
-  useEffect(() => {
-    if (!showId || !season || !episode) return;
-    setLoading(true);
-    setError(null);
+  const showQuery = useQuery<{ name: string; in_production: boolean | null }>({
+    queryKey: queryKeys.mediaDetail("tv", showId ?? ""),
+    queryFn: () =>
+      queryFetch(`/tv/${showId}`),
+    enabled: !!showId,
+  });
 
-    Promise.all([
-      apiFetch(`/tv/${showId}/season/${season}/episode/${episode}`).then(
-        (r) => {
-          if (!r.ok) throw new Error("Episode not found");
-          return r.json();
-        },
-      ),
-      apiFetch(`/tv/${showId}`).then((r) => (r.ok ? r.json() : null)),
-    ])
-      .then(([epData, showData]) => {
-        setData(epData);
-        setShowName(showData?.name ?? null);
-        setShowInProduction(showData?.in_production ?? null);
-      })
-      .catch((e) => setError(e.message))
-      .finally(() => setLoading(false));
-  }, [showId, season, episode]);
+  const watchedEpisodesQuery = useWatchedEpisodes(Number(showId ?? 0));
+  const toggleEpisode = useToggleEpisode();
 
-  // Check if this episode is already watched
-  useEffect(() => {
-    if (!user || !showId) return;
-    apiFetch(`/watched-episode/${showId}`)
-      .then((r) => (r.ok ? r.json() : []))
-      .then((eps: { season_number: number; episode_number: number }[]) => {
-        setWatched(
-          eps.some(
-            (e) =>
-              e.season_number === Number(season) &&
-              e.episode_number === Number(episode),
-          ),
-        );
-      })
-      .catch(() => {});
-  }, [user, showId, season, episode]);
+  const data = episodeQuery.data;
+  const showName = showQuery.data?.name ?? null;
+  const showInProduction = showQuery.data?.in_production ?? null;
+  const isWatched = watchedEpisodesQuery.data?.some(
+    (e) => e.season_number === Number(season) && e.episode_number === Number(episode),
+  ) ?? false;
 
-  async function toggleWatched() {
-    if (!user || !showId || toggling) return;
-    setToggling(true);
-    const wasWatched = watched;
-    setWatched(!wasWatched);
-    try {
-      const res = await apiFetch(
-        `/${wasWatched ? "watched-episode/remove" : "watched-episode/add"}?show_id=${showId}&season_number=${season}&episode_number=${episode}`,
-        { method: wasWatched ? "DELETE" : "POST" },
-      );
-      if (!res.ok) throw new Error();
-    } catch {
-      setWatched(wasWatched); // revert on failure
-    } finally {
-      setToggling(false);
-    }
+  usePageTitle(data ? data.name : "Episode");
+
+  function toggleWatched() {
+    if (!showId) return;
+    toggleEpisode.mutate({
+      showId: Number(showId),
+      seasonNumber: Number(season),
+      episodeNumber: Number(episode),
+      watched: isWatched,
+    });
   }
 
-  if (loading) {
+  if (episodeQuery.isPending) {
     return (
       <div className="flex items-center justify-center py-32">
         <div className="w-8 h-8 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
@@ -206,11 +172,11 @@ export default function EpisodeInfo() {
     );
   }
 
-  if (error || !data) {
+  if (episodeQuery.isError || !data) {
     return (
       <div className="w-full max-w-3xl mx-auto px-4 py-16 text-center">
         <p className="text-error-400 text-lg">
-          {error ?? "Episode not found."}
+          {episodeQuery.error?.message ?? "Episode not found."}
         </p>
         {showId && (
           <Link
@@ -333,16 +299,16 @@ export default function EpisodeInfo() {
           {/* Watched toggle */}
           <button
             onClick={toggleWatched}
-            disabled={toggling}
+            disabled={toggleEpisode.isPending}
             className={`flex-shrink-0 flex items-center gap-2 px-4 py-2 rounded-xl font-medium text-sm transition-all disabled:opacity-50 ${
-              watched
+              isWatched
                 ? "bg-success-700/30 border border-success-600/50 text-success-400 hover:bg-error-900/30 hover:border-error-600/40 hover:text-error-400"
                 : "bg-neutral-800 border border-neutral-600 text-neutral-300 hover:bg-success-900/30 hover:border-success-600/40 hover:text-success-400"
             }`}
           >
-            {toggling ? (
+            {toggleEpisode.isPending ? (
               <span className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
-            ) : watched ? (
+            ) : isWatched ? (
               <svg
                 className="w-4 h-4"
                 viewBox="0 0 24 24"
@@ -372,7 +338,7 @@ export default function EpisodeInfo() {
                 />
               </svg>
             )}
-            {watched ? "Watched" : "Mark Watched"}
+            {isWatched ? "Watched" : "Mark Watched"}
           </button>
         </div>
       </div>

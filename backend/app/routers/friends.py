@@ -111,7 +111,7 @@ def remove_friend(
     return {"detail": "Friend removed."}
 
 
-@router.get("/")
+@router.get("")
 def get_friends(
     db: Session = Depends(get_db),
     uid: str = Depends(get_current_user),
