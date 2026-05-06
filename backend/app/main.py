@@ -47,6 +47,7 @@ from app.services.episode_service import (
     check_and_reactivate_watched_shows,
 )
 
+
 async def _activity_cleanup_loop():
     """Delete activity and old recommendations, runs every hour."""
     while True:
@@ -170,7 +171,7 @@ async def lifespan(app: FastAPI):
     vote_task.cancel()
 
 
-app = FastAPI(title="ReleaseRadar API", lifespan=lifespan, redirect_slashes=False)
+app = FastAPI(title="ReleaseRadar API", lifespan=lifespan, redirect_slashes=True)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 

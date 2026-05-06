@@ -1,9 +1,23 @@
-import { useState } from "react";
+import { useState, useCallback, useMemo } from "react";
 import type { Show, Movie } from "../types/calendar";
 import { useNavigate } from "react-router-dom";
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  verticalListSortingStrategy,
+  arrayMove,
+} from "@dnd-kit/sortable";
 import MediaCard from "../components/MediaCard";
+import WatchlistOrderRow from "../components/WatchlistOrderRow";
 import { usePageTitle } from "../hooks/usePageTitle";
-import { useWatchlist, useRemoveFromList } from "../hooks/api/useLists";
+import { useWatchlist, useRemoveFromList, useReorderWatchlist } from "../hooks/api/useLists";
 
 type TabType = "all" | "movies" | "tv";
 type SortType =
@@ -16,7 +30,14 @@ type SortType =
   | "date_asc"
   | "popularity_desc"
   | "tmdb_rating_desc"
-  | "tmdb_rating_asc";
+  | "tmdb_rating_asc"
+  | "my_order";
+
+type CombinedItem = (Movie | Show) & {
+  _contentType: "movie" | "tv";
+  sort_key: number;
+  watchlist_id: number;
+};
 
 function getTitle(item: Movie | Show) {
   return "title" in item ? item.title : item.name;
@@ -26,6 +47,10 @@ function getDate(item: Movie | Show): string {
   return (
     ("release_date" in item ? item.release_date : item.first_air_date) ?? ""
   );
+}
+
+function getYear(item: Movie | Show): string {
+  return getDate(item).slice(0, 4) || "—";
 }
 
 function applySort<T extends Movie | (Show & { added_at?: string | null })>(
@@ -65,15 +90,45 @@ function applySort<T extends Movie | (Show & { added_at?: string | null })>(
   }
 }
 
+function buildCombined(
+  movies: Movie[],
+  shows: Show[],
+  query: string,
+): CombinedItem[] {
+  const q = query.toLowerCase();
+  const filteredMovies = movies
+    .filter((m) => m.title.toLowerCase().includes(q) && m.watchlist_id != null)
+    .map((m) => ({
+      ...m,
+      _contentType: "movie" as const,
+      sort_key: m.sort_key ?? 0,
+      watchlist_id: m.watchlist_id!,
+    }));
+  const filteredShows = shows
+    .filter((s) => s.name.toLowerCase().includes(q) && s.watchlist_id != null)
+    .map((s) => ({
+      ...s,
+      _contentType: "tv" as const,
+      sort_key: s.sort_key ?? 0,
+      watchlist_id: s.watchlist_id!,
+    }));
+  return [...filteredMovies, ...filteredShows].sort(
+    (a, b) => a.sort_key - b.sort_key,
+  );
+}
+
 export default function Watchlist() {
   usePageTitle("Watchlist");
   const navigate = useNavigate();
   const { data, isPending: loading } = useWatchlist();
   const results = data ?? { movies: [], shows: [] };
   const removeFromList = useRemoveFromList();
+  const reorderWatchlist = useReorderWatchlist();
   const [activeTab, setActiveTab] = useState<TabType>("all");
   const [query, setQuery] = useState("");
-  const [sort, setSort] = useState<SortType>("default");
+  const [sort, setSort] = useState<SortType>("my_order");
+
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
 
   async function onRemove(type: "tv" | "movie", content_id: number) {
     try {
@@ -87,10 +142,40 @@ export default function Watchlist() {
     }
   }
 
+  const fireReorder = useCallback(
+    (contentType: "movie" | "tv", contentId: number, beforeId: number | null, afterId: number | null) => {
+      const savedScroll = window.scrollY;
+      reorderWatchlist.mutate({ contentType, contentId, beforeId, afterId });
+      requestAnimationFrame(() => window.scrollTo({ top: savedScroll, behavior: "instant" as ScrollBehavior }));
+    },
+    [reorderWatchlist],
+  );
+
+  function handleDragEnd(event: DragEndEvent, items: CombinedItem[]) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    const activeIdx = items.findIndex((i) => `${i._contentType}-${i.id}` === active.id);
+    const overIdx = items.findIndex((i) => `${i._contentType}-${i.id}` === over.id);
+    if (activeIdx === -1 || overIdx === -1) return;
+
+    const newItems = arrayMove(items, activeIdx, overIdx);
+    const moved = newItems[overIdx];
+    const beforeItem = newItems[overIdx - 1] ?? null;
+    const afterItem = newItems[overIdx + 1] ?? null;
+
+    fireReorder(
+      moved._contentType,
+      moved.id,
+      beforeItem?.watchlist_id ?? null,
+      afterItem?.watchlist_id ?? null,
+    );
+  }
+
   const totalCount = results.movies.length + results.shows.length;
-  const showMovies = activeTab === "all" || activeTab === "movies";
-  const showTV = activeTab === "all" || activeTab === "tv";
+  const isMyOrder = sort === "my_order";
   const q = query.toLowerCase();
+
   const filteredMovies = applySort(
     results.movies.filter((m) => m.title.toLowerCase().includes(q)),
     sort,
@@ -100,11 +185,31 @@ export default function Watchlist() {
     sort,
   );
 
+  const combinedItems = useMemo(
+    () => (isMyOrder ? buildCombined(results.movies, results.shows, query) : []),
+    [isMyOrder, results.movies, results.shows, query],
+  );
+  const combinedByType = useMemo(
+    () => ({
+      movies: combinedItems.filter((i) => i._contentType === "movie"),
+      shows: combinedItems.filter((i) => i._contentType === "tv"),
+    }),
+    [combinedItems],
+  );
+
   const tabs: { id: TabType; label: string; count: number }[] = [
     { id: "all", label: "All", count: totalCount },
     { id: "movies", label: "Movies", count: results.movies.length },
     { id: "tv", label: "TV Shows", count: results.shows.length },
   ];
+
+  // Items to render in My Order filtered views (no drag, arrows only)
+  const myOrderFilteredItems =
+    activeTab === "movies"
+      ? combinedByType.movies
+      : activeTab === "tv"
+        ? combinedByType.shows
+        : [];
 
   return (
     <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 py-8 pb-16">
@@ -192,18 +297,8 @@ export default function Watchlist() {
                 onClick={() => setQuery("")}
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-500 hover:text-neutral-300"
               >
-                <svg
-                  className="w-4 h-4"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  strokeWidth={2}
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M6 18L18 6M6 6l12 12"
-                  />
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
             )}
@@ -213,7 +308,7 @@ export default function Watchlist() {
             onChange={(e) => setSort(e.target.value as SortType)}
             className="w-28 sm:w-auto shrink-0 text-sm bg-neutral-800 border border-neutral-700 text-neutral-300 rounded-lg px-3 py-2 focus:outline-none focus:border-neutral-500"
           >
-            <option value="default">Sort: Default</option>
+            <option value="my_order">My Order</option>
             <option value="added_desc">Recently Added</option>
             <option value="added_asc">Oldest Added</option>
             <option value="title_asc">Title: A → Z</option>
@@ -230,26 +325,12 @@ export default function Watchlist() {
       {!loading && totalCount === 0 && (
         <div className="flex flex-col items-center justify-center py-20 text-center">
           <div className="w-16 h-16 rounded-full bg-neutral-800 border border-neutral-700 flex items-center justify-center mb-4">
-            <svg
-              className="w-8 h-8 text-neutral-500"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={1.5}
-                d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"
-              />
+            <svg className="w-8 h-8 text-neutral-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
             </svg>
           </div>
-          <h3 className="text-neutral-300 font-medium mb-1">
-            Your watchlist is empty
-          </h3>
-          <p className="text-neutral-500 text-sm mb-4">
-            Browse Trending or Upcoming to find something to add
-          </p>
+          <h3 className="text-neutral-300 font-medium mb-1">Your watchlist is empty</h3>
+          <p className="text-neutral-500 text-sm mb-4">Browse Trending or Upcoming to find something to add</p>
           <button
             onClick={() => navigate("/trending")}
             className="bg-primary-600 hover:bg-primary-500 text-white text-sm font-medium px-5 py-2 rounded-lg transition-colors"
@@ -259,22 +340,116 @@ export default function Watchlist() {
         </div>
       )}
 
-      {!loading &&
-        totalCount > 0 &&
-        query &&
-        filteredMovies.length === 0 &&
-        filteredShows.length === 0 && (
-          <div className="flex flex-col items-center justify-center py-20 text-center">
-            <p className="text-neutral-400 font-medium mb-1">
-              No results for "{query}"
-            </p>
-            <p className="text-neutral-500 text-sm">
-              Try a different search term
-            </p>
-          </div>
-        )}
+      {!loading && totalCount > 0 && query && filteredMovies.length === 0 && filteredShows.length === 0 && !isMyOrder && (
+        <div className="flex flex-col items-center justify-center py-20 text-center">
+          <p className="text-neutral-400 font-medium mb-1">No results for "{query}"</p>
+          <p className="text-neutral-500 text-sm">Try a different search term</p>
+        </div>
+      )}
 
-      {showMovies && filteredMovies.length > 0 && (
+      {!loading && totalCount > 0 && query && isMyOrder && combinedItems.length === 0 && (
+        <div className="flex flex-col items-center justify-center py-20 text-center">
+          <p className="text-neutral-400 font-medium mb-1">No results for "{query}"</p>
+          <p className="text-neutral-500 text-sm">Try a different search term</p>
+        </div>
+      )}
+
+      {/* ── My Order: All tab — combined sortable list ── */}
+      {!loading && isMyOrder && activeTab === "all" && combinedItems.length > 0 && (
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragEnd={(e) => handleDragEnd(e, combinedItems)}
+        >
+          <SortableContext
+            items={combinedItems.map((i) => `${i._contentType}-${i.id}`)}
+            strategy={verticalListSortingStrategy}
+          >
+            <div className="flex flex-col gap-2">
+              {combinedItems.map((item, idx) => (
+                <WatchlistOrderRow
+                  key={`${item._contentType}-${item.id}`}
+                  dndId={`${item._contentType}-${item.id}`}
+                  rank={idx + 1}
+                  title={getTitle(item)}
+                  posterPath={item.poster_path}
+                  year={getYear(item)}
+                  contentType={item._contentType}
+                  voteAverage={item.vote_average}
+                  userRating={item.user_rating}
+                  genres={item.genres}
+                  isFirst={idx === 0}
+                  isLast={idx === combinedItems.length - 1}
+                  onMoveUp={() => {
+                    const before = combinedItems[idx - 2] ?? null;
+                    const after = combinedItems[idx - 1];
+                    fireReorder(item._contentType, item.id, before?.watchlist_id ?? null, after.watchlist_id);
+                  }}
+                  onMoveDown={() => {
+                    const before = combinedItems[idx + 1];
+                    const after = combinedItems[idx + 2] ?? null;
+                    fireReorder(item._contentType, item.id, before.watchlist_id, after?.watchlist_id ?? null);
+                  }}
+                  onMoveToTop={() => {
+                    if (idx === 0) return;
+                    const after = combinedItems[0];
+                    fireReorder(item._contentType, item.id, null, after.watchlist_id);
+                  }}
+                  onClick={() =>
+                    navigate(`/${item._contentType === "movie" ? "movies" : "shows"}/${item.id}`)
+                  }
+                />
+              ))}
+            </div>
+          </SortableContext>
+        </DndContext>
+      )}
+
+      {/* ── My Order: Movies or TV tab — filtered list, arrows only (no drag) ── */}
+      {!loading && isMyOrder && activeTab !== "all" && myOrderFilteredItems.length > 0 && (
+        <div className="flex flex-col gap-2">
+          {myOrderFilteredItems.map((item) => {
+            const allIdx = combinedItems.findIndex((c) => c._contentType === item._contentType && c.id === item.id);
+            return (
+            <WatchlistOrderRow
+              key={`${item._contentType}-${item.id}`}
+              dndId={`${item._contentType}-${item.id}`}
+              rank={allIdx + 1}
+              title={getTitle(item)}
+              posterPath={item.poster_path}
+              year={getYear(item)}
+              contentType={item._contentType}
+              voteAverage={item.vote_average}
+              userRating={item.user_rating}
+              genres={item.genres}
+              isFirst={allIdx === 0}
+              isLast={allIdx === combinedItems.length - 1}
+              isDragDisabled
+              onMoveUp={() => {
+                const before = combinedItems[allIdx - 2] ?? null;
+                const after = combinedItems[allIdx - 1];
+                if (after) fireReorder(item._contentType, item.id, before?.watchlist_id ?? null, after.watchlist_id);
+              }}
+              onMoveDown={() => {
+                const before = combinedItems[allIdx + 1];
+                const after = combinedItems[allIdx + 2] ?? null;
+                if (before) fireReorder(item._contentType, item.id, before.watchlist_id, after?.watchlist_id ?? null);
+              }}
+              onMoveToTop={() => {
+                if (allIdx === 0) return;
+                const after = combinedItems[0];
+                fireReorder(item._contentType, item.id, null, after?.watchlist_id ?? null);
+              }}
+              onClick={() =>
+                navigate(`/${item._contentType === "movie" ? "movies" : "shows"}/${item.id}`)
+              }
+            />
+          ); })}
+        </div>
+      )}
+
+      {/* ── Non-My-Order grid views ── */}
+      {!loading && !isMyOrder && (activeTab === "all" || activeTab === "movies") && filteredMovies.length > 0 && (
         <div className="mb-10">
           {activeTab === "all" && (
             <h2 className="text-lg font-semibold text-neutral-200 mb-4 flex items-center gap-2">
@@ -286,18 +461,13 @@ export default function Watchlist() {
           )}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {filteredMovies.map((item) => (
-              <MediaCard
-                key={`movie-${item.id}`}
-                type="movie"
-                item={item}
-                onRemove={onRemove}
-              />
+              <MediaCard key={`movie-${item.id}`} type="movie" item={item} onRemove={onRemove} />
             ))}
           </div>
         </div>
       )}
 
-      {showTV && filteredShows.length > 0 && (
+      {!loading && !isMyOrder && (activeTab === "all" || activeTab === "tv") && filteredShows.length > 0 && (
         <div>
           {activeTab === "all" && (
             <h2 className="text-lg font-semibold text-neutral-200 mb-4 flex items-center gap-2">
@@ -309,12 +479,7 @@ export default function Watchlist() {
           )}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {filteredShows.map((item) => (
-              <MediaCard
-                key={`tv-${item.id}`}
-                type="tv"
-                item={item}
-                onRemove={onRemove}
-              />
+              <MediaCard key={`tv-${item.id}`} type="tv" item={item} onRemove={onRemove} />
             ))}
           </div>
         </div>

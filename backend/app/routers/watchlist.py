@@ -9,6 +9,7 @@ from app.services.watchlist_service import (
     _get_watchlist_items,
     get_watchlist_status,
     get_tv_calendar,
+    reorder_watchlist_item,
 )
 from app.models.watchlist import Watchlist
 from app.models.watched import Watched
@@ -58,6 +59,25 @@ def get_user_watchlist(
     uid: str = Depends(get_current_user),
 ):
     return get_watchlist(db, uid)
+
+
+@router.post("/reorder")
+@limiter.limit("60/minute")
+def reorder_item(
+    request: Request,
+    content_type: str = Body(...),
+    content_id: int = Body(...),
+    before_id: int | None = Body(None),
+    after_id: int | None = Body(None),
+    db: Session = Depends(get_db),
+    uid: str = Depends(get_current_user),
+):
+    if content_type not in ("movie", "tv"):
+        raise HTTPException(status_code=400, detail="content_type must be 'movie' or 'tv'")
+    try:
+        return reorder_watchlist_item(db, uid, content_type, content_id, before_id, after_id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
 
 
 @router.get("/tv/calendar")

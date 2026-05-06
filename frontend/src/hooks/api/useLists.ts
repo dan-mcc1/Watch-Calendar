@@ -124,3 +124,81 @@ export function useRemoveFromList() {
     },
   });
 }
+
+export function useReorderWatchlist() {
+  const user = useAuthUser();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      contentType,
+      contentId,
+      beforeId,
+      afterId,
+    }: {
+      contentType: "movie" | "tv";
+      contentId: number;
+      beforeId: number | null;
+      afterId: number | null;
+    }) => {
+      const res = await apiFetch("/watchlist/reorder", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          content_type: contentType,
+          content_id: contentId,
+          before_id: beforeId,
+          after_id: afterId,
+        }),
+      });
+      if (!res.ok) throw new Error("Failed to reorder");
+      return res.json() as Promise<{ movies: Movie[]; shows: Show[] }>;
+    },
+    onMutate: async ({ contentType, contentId, beforeId, afterId }) => {
+      if (!user) return;
+      const key = queryKeys.watchlist(user.uid);
+      await queryClient.cancelQueries({ queryKey: key });
+      const previous = queryClient.getQueryData<{ movies: Movie[]; shows: Show[] }>(key);
+
+      if (previous) {
+        // Build combined list, reorder, split back out
+        const movies = previous.movies.map((m) => ({ ...m, _type: "movie" as const }));
+        const shows = previous.shows.map((s) => ({ ...s, _type: "tv" as const }));
+        const combined = [...movies, ...shows].sort(
+          (a, b) => (a.sort_key ?? 0) - (b.sort_key ?? 0),
+        );
+
+        const movedIdx = combined.findIndex(
+          (i) => i._type === contentType && i.id === contentId,
+        );
+        if (movedIdx !== -1) {
+          const [moved] = combined.splice(movedIdx, 1);
+          // afterId = item that will be below; beforeId fallback for move-to-bottom
+          const afterIdx =
+            afterId !== null
+              ? combined.findIndex((i) => i.watchlist_id === afterId)
+              : beforeId !== null
+                ? combined.findIndex((i) => i.watchlist_id === beforeId) + 1
+                : combined.length;
+          combined.splice(afterIdx === -1 ? combined.length : afterIdx, 0, moved);
+        }
+
+        // Re-assign temporary sort_keys for optimistic display
+        const reordered = combined.map((item, idx) => ({ ...item, sort_key: (idx + 1) * 1000 }));
+        queryClient.setQueryData(key, {
+          movies: reordered.filter((i) => i._type === "movie").map(({ _type, ...m }) => m),
+          shows: reordered.filter((i) => i._type === "tv").map(({ _type, ...s }) => s),
+        });
+      }
+      return { previous };
+    },
+    onError: (_err, _vars, context) => {
+      if (!user || !context?.previous) return;
+      queryClient.setQueryData(queryKeys.watchlist(user.uid), context.previous);
+    },
+    onSuccess: (data) => {
+      if (!user) return;
+      queryClient.setQueryData(queryKeys.watchlist(user.uid), data);
+    },
+  });
+}

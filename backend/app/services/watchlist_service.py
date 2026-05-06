@@ -1,6 +1,6 @@
 # app/services/watchlist_service.py
 from sqlalchemy.orm import Session, selectinload
-from sqlalchemy import and_, select, exists, literal, union_all
+from sqlalchemy import and_, select, exists, literal, union_all, func
 from datetime import datetime
 from app.models.watchlist import Watchlist
 from app.models.watched import Watched
@@ -399,14 +399,20 @@ def add_to_watchlist(db: Session, user_id: str, content_type: str, content_id: i
     if existing:
         return existing
 
-    # Only increment tracking_count if not already on any other list
     already_tracked = _is_on_other_list(db, user_id, content_type, content_id)
+
+    max_sort_key = (
+        db.query(func.max(Watchlist.sort_key))
+        .filter_by(user_id=user_id)
+        .scalar()
+    ) or 0
 
     entry = Watchlist(
         user_id=user_id,
         content_type=content_type,
         content_id=content_id,
         added_at=datetime.utcnow(),
+        sort_key=max_sort_key + 1000,
     )
     db.add(entry)
 
@@ -419,8 +425,71 @@ def add_to_watchlist(db: Session, user_id: str, content_type: str, content_id: i
 
     db.commit()
     db.refresh(entry)
-
     return entry
+
+
+def _renormalize_sort_keys(db: Session, user_id: str) -> None:
+    """Re-space all of a user's watchlist sort_keys to multiples of 1000."""
+    items = (
+        db.query(Watchlist)
+        .filter_by(user_id=user_id)
+        .order_by(Watchlist.sort_key)
+        .all()
+    )
+    for i, item in enumerate(items, start=1):
+        item.sort_key = i * 1000
+
+
+def reorder_watchlist_item(
+    db: Session,
+    user_id: str,
+    content_type: str,
+    content_id: int,
+    before_id: int | None,
+    after_id: int | None,
+):
+    """
+    Move a watchlist item so it sits between the items identified by before_id and after_id.
+    before_id=None means move to top. after_id=None means move to bottom.
+    Renormalizes all sort_keys for the user if any gap drops to <= 10.
+    Returns the updated watchlist dict.
+    """
+    entry = (
+        db.query(Watchlist)
+        .filter_by(user_id=user_id, content_type=content_type, content_id=content_id)
+        .first()
+    )
+    if not entry:
+        raise ValueError("Item not in watchlist")
+
+    before_key = 0
+    if before_id is not None:
+        bk = db.query(Watchlist.sort_key).filter_by(id=before_id, user_id=user_id).scalar()
+        if bk is None:
+            raise ValueError(f"before_id {before_id} not found in user's watchlist")
+        before_key = bk
+
+    if after_id is not None:
+        ak = db.query(Watchlist.sort_key).filter_by(id=after_id, user_id=user_id).scalar()
+        if ak is None:
+            raise ValueError(f"after_id {after_id} not found in user's watchlist")
+        after_key = ak
+    else:
+        max_key = db.query(func.max(Watchlist.sort_key)).filter_by(user_id=user_id).scalar() or 0
+        after_key = max_key + 2000
+
+    new_sort_key = (before_key + after_key) // 2
+    gap_above = new_sort_key - before_key
+    gap_below = after_key - new_sort_key
+
+    entry.sort_key = new_sort_key
+    db.flush()
+
+    if min(gap_above, gap_below) <= 10:
+        _renormalize_sort_keys(db, user_id)
+
+    db.commit()
+    return get_watchlist(db, user_id)
 
 
 def remove_from_watchlist(
@@ -549,7 +618,7 @@ def _get_watchlist_items(db: Session, user_id: str, content_type: str):
         )
 
     rows = (
-        db.query(model, Watchlist.added_at)
+        db.query(model, Watchlist.added_at, Watchlist.sort_key, Watchlist.id)
         .options(*options)
         .select_from(Watchlist)
         .join(
@@ -560,11 +629,17 @@ def _get_watchlist_items(db: Session, user_id: str, content_type: str):
                 Watchlist.user_id == user_id,
             ),
         )
+        .order_by(Watchlist.sort_key)
         .all()
     )
     return [
-        {**serialize(item), "added_at": added_at.isoformat() if added_at else None}
-        for item, added_at in rows
+        {
+            **serialize(item),
+            "added_at": added_at.isoformat() if added_at else None,
+            "sort_key": sort_key,
+            "watchlist_id": watchlist_id,
+        }
+        for item, added_at, sort_key, watchlist_id in rows
     ]
 
 
